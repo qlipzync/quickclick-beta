@@ -2,33 +2,41 @@ name: CI & Build Test
 
 on:
   push:
-    branches: [ "main", "fix-npm-dependencies" ]
+    branches:
+      - main
+      - fix/production-readiness-2026-10-16
+      - fix-npm-dependencies
   pull_request:
-    branches: [ "main" ]
+    branches: [main]
+
+permissions:
+  contents: read
 
 jobs:
-  build:
+  verify:
+    name: Typecheck, tests, build and container
     runs-on: ubuntu-latest
-
-    strategy:
-      matrix:
-        node-version: [22.x]
-
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ matrix.node-version }}
-        cache: 'npm'
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
 
-    - name: Install dependencies
-      run: npm install --legacy-peer-deps
+      - name: Install locked dependencies
+        run: npm ci --legacy-peer-deps
 
-    - name: Run Typecheck & Lint
-      run: npm run lint
+      - name: Typecheck
+        run: npm run lint
 
-    - name: Build Application
-      run: npm run build
+      - name: Build frontend and production server
+        run: npm run build
+
+      - name: Run application tests
+        run: npm test
+
+      - name: Build production container
+        run: docker build --tag quickclick-beta:${{ github.sha }} .
