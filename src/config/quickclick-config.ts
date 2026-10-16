@@ -62,13 +62,13 @@ export const QUOTA_TIERS = {
 export const FIRESTORE_DATABASE_TOPOLOGY = {
   prod: {
     id: "ai-studio-quickclick-003fd948-cf64-489f-9030-863f460c6c91",
-    region: "europe-west1",
+    region: "europe-west3",
     purpose: "SaaS-Produktionsumgebung (Konsolidiert)",
     description: "Alle Live-Nutzerdaten, Rechnungen, Kanalkonfigurationen, bearbeitete Clips & KI-Modul-Metadaten. Ermöglicht nahtlose get() Security Rules ohne Cross-Database-Grenzen."
   },
   dev: {
     id: "(default)",
-    region: "europe-west1",
+    region: "europe-west3",
     purpose: "Entwicklung, Staging & Sandbox",
     description: "Sandbox-Umgebung für lokales Testen, CI/CD-Pipelines und Staging mit täglichem No-Cost Free Tier."
   },
