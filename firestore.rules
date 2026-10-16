@@ -46,6 +46,16 @@ service cloud.firestore {
       // Other users may create only an inactive, zero-quota profile.
       allow create: if isOwner(userId) &&
         (isMasterAdmin() || canCreateNonPrivilegedUser());
+      allow update: if (
+        isOwner(userId) &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'role', 'isAdmin', 'subscriptionPlan', 'hasActiveSubscription',
+          'adminOverrideActive', 'clipsLimitTotal', 'subscriptionStatus',
+          'subscriptionTierLevel', 'clipBalance', 'dailyClipCount',
+          'isTitanVip', 'billingCycle', 'stripeCustomerId', 'stripeSubscriptionId',
+          'apiCallsLimit', 'plan'
+        ])
+      ) || isMasterAdmin();
       allow delete: if isMasterAdmin();
     }
 
