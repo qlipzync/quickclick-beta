@@ -3,11 +3,9 @@ import type { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import fs from 'fs';
 import { GoogleGenAI, Type } from '@google/genai';
 import type { Schema } from '@google/genai';
-import { VertexAI } from '@google-cloud/vertexai';
 import { parseAndValidateAIResponse } from './server/schemas/quickClick.schema.js';
 import { getFirestore } from 'firebase-admin/firestore';
 import { requireAuth, requireActiveSubscription } from './server/middleware/authMiddleware.js';
@@ -341,8 +339,7 @@ export async function processVideoClip(videoFileBuffer?: Buffer) {
   return validatedData;
 }
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __dirname = process.cwd();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -408,7 +405,7 @@ const sendConfig = (_req: Request, res: Response) => {
     endpoints: {
       apiBaseUrl: '/api',
       productionHostingUrl: 'https://qlipzync.web.app',
-      databaseId: 'qlipzync-prod',
+      databaseId: 'ai-studio-quickclick-003fd948-cf64-489f-9030-863f460c6c91',
     },
   });
 };
@@ -429,13 +426,12 @@ app.post('/api/gemini', requireAuth, requireActiveSubscription, async (req: Requ
   const modelName = process.env.VERTEX_AI_MODEL || 'gemini-1.5-flash-002';
 
   try {
-    const vertexAI = new VertexAI({ project, location });
-    const generativeModel = vertexAI.getGenerativeModel({ model: modelName });
-    const response = await generativeModel.generateContent({
+    const ai = new GoogleGenAI({ vertexai: true, project, location });
+    const response = await ai.models.generateContent({
+      model: modelName,
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
     });
-    const replyText =
-      response.response?.candidates?.[0]?.content?.parts?.map((p: any) => p.text || '').join('') || '';
+    const replyText = response.text || '';
     return res.status(200).json({ reply: replyText, text: replyText, provider: 'vertex-ai', model: modelName });
   } catch (err: any) {
     const errMsg = String(err?.message || err || '');
@@ -580,7 +576,7 @@ app.use('/api/api-keys', apiKeysRouter);
 app.post(['/api/v1/clips/trigger-sync', '/api/clips/trigger-sync'], requireAuth, requireActiveSubscription, async (req: Request, res: Response) => {
   const userId = req.user!.uid;
   try {
-    const db = getFirestore(process.env.FIRESTORE_DB || 'qlipzync-prod');
+    const db = getFirestore(process.env.FIRESTORE_DB || 'ai-studio-quickclick-003fd948-cf64-489f-9030-863f460c6c91');
     const userDoc = await db.collection('users').doc(userId).get();
     const userData = userDoc.data();
     const channelName = userData?.channelName || userData?.name || 'Twitch Streamer';
@@ -604,7 +600,7 @@ app.post(['/api/v1/clips/trigger-sync', '/api/clips/trigger-sync'], requireAuth,
 app.get('/api/integrations/status', requireAuth, async (req: Request, res: Response) => {
   try {
     const uid = req.user!.uid;
-    const db = getFirestore(process.env.FIRESTORE_DB || 'qlipzync-prod');
+    const db = getFirestore(process.env.FIRESTORE_DB || 'ai-studio-quickclick-003fd948-cf64-489f-9030-863f460c6c91');
     const integrationsSnapshot = await db
       .collection('users')
       .doc(uid)
