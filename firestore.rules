@@ -25,11 +25,18 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow read: if isOwner(userId) || isMasterAdmin();
-      allow create: if isAuthenticated() && request.auth.uid == userId;
+      // Clients may create their own profile, but RBAC and billing fields are server-managed.
+      allow create: if isOwner(userId) &&
+        !request.resource.data.keys().hasAny([
+          'role', 'isAdmin', 'subscriptionPlan', 'hasActiveSubscription',
+          'adminOverrideActive', 'clipsLimitTotal', 'subscriptionStatus',
+          'subscriptionTierLevel', 'clipBalance', 'dailyClipCount',
+          'isTitanVip', 'billingCycle', 'stripeCustomerId', 'stripeSubscriptionId'
+        ]);
       allow update: if (
         isOwner(userId) &&
         !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-          'role', 'isAdmin', 'subscriptionPlan', 'hasActiveSubscription', 'adminOverrideActive', 'clipsLimitTotal'
+          'role', 'isAdmin', 'subscriptionPlan', 'hasActiveSubscription', 'adminOverrideActive', 'clipsLimitTotal', 'subscriptionStatus', 'subscriptionTierLevel', 'clipBalance', 'dailyClipCount', 'isTitanVip', 'billingCycle', 'stripeCustomerId', 'stripeSubscriptionId'
         ])
       ) || isMasterAdmin();
       allow delete: if isMasterAdmin();
