@@ -42,20 +42,10 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow read: if isOwner(userId) || isMasterAdmin();
-      // Clients may create their own profile, but RBAC and billing fields are server-managed.
+      // Only the verified master administrator can create privileged profiles.
+      // Other users may create only an inactive, zero-quota profile.
       allow create: if isOwner(userId) &&
-        !request.resource.data.keys().hasAny([
-          'role', 'isAdmin', 'subscriptionPlan', 'hasActiveSubscription',
-          'adminOverrideActive', 'clipsLimitTotal', 'subscriptionStatus',
-          'subscriptionTierLevel', 'clipBalance', 'dailyClipCount',
-          'isTitanVip', 'billingCycle', 'stripeCustomerId', 'stripeSubscriptionId'
-        ]);
-      allow update: if (
-        isOwner(userId) &&
-        !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-          'role', 'isAdmin', 'subscriptionPlan', 'hasActiveSubscription', 'adminOverrideActive', 'clipsLimitTotal', 'subscriptionStatus', 'subscriptionTierLevel', 'clipBalance', 'dailyClipCount', 'isTitanVip', 'billingCycle', 'stripeCustomerId', 'stripeSubscriptionId', 'apiCallsLimit', 'plan'
-        ])
-      ) || isMasterAdmin();
+        (isMasterAdmin() || canCreateNonPrivilegedUser());
       allow delete: if isMasterAdmin();
     }
 
