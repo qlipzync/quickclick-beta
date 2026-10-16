@@ -14,8 +14,8 @@ export const GCP_PROJECT_METADATA = {
   organization: "QlipZync",
   publicName: "QlipZync",
   supportEmail: "robert.f.telekom@gmail.com",
-  defaultRegion: "europe-west1",
-  databaseId: "qlipzync-prod",
+  defaultRegion: "europe-west3",
+  databaseId: "ai-studio-quickclick-003fd948-cf64-489f-9030-863f460c6c91",
   fcmSenderId: "248792984033"
 } as const;
 
@@ -24,7 +24,7 @@ export const AI_STUDIO_LIVE_ENDPOINTS = {
   firebaseAppDomain: "https://qlipzync.firebaseapp.com",
   apiBaseUrl: "/api",
   twitchEventSubCallbackUrl: "/api/webhooks/twitch",
-  databaseId: "qlipzync-prod"
+  databaseId: "ai-studio-quickclick-003fd948-cf64-489f-9030-863f460c6c91"
 } as const;
 
 export const EXTENDED_PIPELINE_CONFIG = {
@@ -61,7 +61,7 @@ export const QUOTA_TIERS = {
 
 export const FIRESTORE_DATABASE_TOPOLOGY = {
   prod: {
-    id: "qlipzync-prod",
+    id: "ai-studio-quickclick-003fd948-cf64-489f-9030-863f460c6c91",
     region: "europe-west1",
     purpose: "SaaS-Produktionsumgebung (Konsolidiert)",
     description: "Alle Live-Nutzerdaten, Rechnungen, Kanalkonfigurationen, bearbeitete Clips & KI-Modul-Metadaten. Ermöglicht nahtlose get() Security Rules ohne Cross-Database-Grenzen."
@@ -74,16 +74,16 @@ export const FIRESTORE_DATABASE_TOPOLOGY = {
   },
   // Kompatibilitäts-Aliase: Leiten auf die konsolidierte Produktions-DB weiter
   aiStudio: {
-    id: "qlipzync-prod",
+    id: "ai-studio-quickclick-003fd948-cf64-489f-9030-863f460c6c91",
     region: "europe-west1",
-    purpose: "KI-Metadaten (In qlipzync-prod konsolidiert)",
-    description: "Konsolidiert in qlipzync-prod für atomare Transaktionen und direkte Sicherheitsregel-Prüfungen."
+    purpose: "KI-Metadaten (In ai-studio-quickclick-003fd948-cf64-489f-9030-863f460c6c91 konsolidiert)",
+    description: "Konsolidiert in ai-studio-quickclick-003fd948-cf64-489f-9030-863f460c6c91 für atomare Transaktionen und direkte Sicherheitsregel-Prüfungen."
   },
   autonomous: {
-    id: "qlipzync-prod",
+    id: "ai-studio-quickclick-003fd948-cf64-489f-9030-863f460c6c91",
     region: "europe-west1",
-    purpose: "Autonome Agenten & Bots (In qlipzync-prod konsolidiert)",
-    description: "Konsolidiert in qlipzync-prod für zentrale Auditierung und nahtlose Quota-Validierung."
+    purpose: "Autonome Agenten & Bots (In ai-studio-quickclick-003fd948-cf64-489f-9030-863f460c6c91 konsolidiert)",
+    description: "Konsolidiert in ai-studio-quickclick-003fd948-cf64-489f-9030-863f460c6c91 für zentrale Auditierung und nahtlose Quota-Validierung."
   }
 } as const;
 
