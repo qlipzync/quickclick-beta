@@ -1,0 +1,536 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    background-color: #070514;
+    color: #f4f4f5;
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  }
+
+  code, pre, .font-mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+.font-display {
+  font-family: 'Orbitron', 'Space Grotesk', sans-serif;
+}
+
+.font-syne {
+  font-family: 'Syne', sans-serif;
+}
+
+/* Cosmic purple neon glow utilities */
+.neon-glow-purple {
+  box-shadow: 0 0 35px -5px rgba(168, 85, 247, 0.25);
+}
+
+.neon-border-purple {
+  border-color: rgba(168, 85, 247, 0.35);
+}
+
+.neon-border-purple:hover {
+  border-color: rgba(217, 70, 239, 0.65);
+  box-shadow: 0 0 25px rgba(168, 85, 247, 0.3);
+}
+
+/* Custom Cosmic & Astronaut Keyframe Animations */
+@keyframes floatSlow {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-14px) rotate(2deg);
+  }
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    opacity: 0.4;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1.08);
+  }
+}
+
+@keyframes subtleGradientPulse {
+  0%, 100% {
+    background-position: 0% 50%;
+    filter: drop-shadow(0 0 12px rgba(45, 212, 191, 0.25));
+  }
+  50% {
+    background-position: 100% 50%;
+    filter: drop-shadow(0 0 24px rgba(147, 51, 234, 0.45));
+  }
+}
+
+.animate-pulse-gradient {
+  background-size: 200% 200%;
+  animation: subtleGradientPulse 4s ease-in-out infinite;
+}
+
+/* Wave Glow Background Animations */
+@keyframes waveGlowDrift {
+  0% {
+    transform: translate3d(-3%, -2%, 0) rotate(0deg) scale(1);
+    opacity: 0.35;
+  }
+  33% {
+    transform: translate3d(3%, 4%, 0) rotate(2deg) scale(1.08);
+    opacity: 0.55;
+  }
+  66% {
+    transform: translate3d(-2%, 5%, 0) rotate(-1.5deg) scale(0.98);
+    opacity: 0.45;
+  }
+  100% {
+    transform: translate3d(-3%, -2%, 0) rotate(0deg) scale(1);
+    opacity: 0.35;
+  }
+}
+
+@keyframes waveGlowPulse {
+  0%, 100% {
+    opacity: 0.35;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.12);
+  }
+}
+
+@keyframes waveShimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-wave-glow {
+  animation: waveGlowDrift 14s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+.animate-wave-glow-reverse {
+  animation: waveGlowDrift 18s ease-in-out infinite reverse;
+  will-change: transform, opacity;
+}
+
+.animate-wave-pulse {
+  animation: waveGlowPulse 8s ease-in-out infinite;
+}
+
+.wave-glow-container {
+  mask-image: radial-gradient(ellipse at center, black 40%, transparent 80%);
+  -webkit-mask-image: radial-gradient(ellipse at center, black 40%, transparent 80%);
+}
+
+/* ========================================================================= */
+/* ASTRONAUT PIPELINE CSS ANIMATIONS (Motion-Path & Particle FX)             */
+/* ========================================================================= */
+@keyframes astronautOrbitPath {
+  0% {
+    offset-distance: 0%;
+  }
+  100% {
+    offset-distance: 100%;
+  }
+}
+
+@keyframes pipelineLaserFlow {
+  0% {
+    stroke-dashoffset: 600;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes thrusterFlicker {
+  0%, 100% {
+    transform: scaleY(1) scaleX(1);
+    opacity: 0.85;
+    filter: drop-shadow(0 0 6px rgba(244, 63, 94, 0.8));
+  }
+  50% {
+    transform: scaleY(1.4) scaleX(0.92);
+    opacity: 1;
+    filter: drop-shadow(0 0 14px rgba(244, 63, 94, 1));
+  }
+}
+
+@keyframes beaconRingExpand {
+  0% {
+    r: 6;
+    opacity: 0.9;
+  }
+  100% {
+    r: 22;
+    opacity: 0;
+  }
+}
+
+@keyframes astronautZeroGravityBob {
+  0%, 100% {
+    transform: translateY(0px) rotate(-2deg);
+  }
+  50% {
+    transform: translateY(-5px) rotate(3deg);
+  }
+}
+
+@keyframes clipBadgeGlow {
+  0%, 100% {
+    filter: drop-shadow(0 0 6px rgba(217, 70, 239, 0.6));
+  }
+  50% {
+    filter: drop-shadow(0 0 16px rgba(6, 182, 212, 0.9));
+  }
+}
+
+/* Motion-Path Rider Class */
+.astronaut-path-rider {
+  offset-path: path("M 80,110 C 170,110 250,50 340,50 C 430,50 510,170 600,170 C 690,170 770,50 860,50 C 950,50 1030,110 1120,110 C 1170,110 1180,215 1100,215 C 800,225 400,225 100,215 C 20,215 30,110 80,110 Z");
+  offset-rotate: auto 0deg;
+  animation: astronautOrbitPath var(--pipeline-duration, 16s) linear infinite;
+  transform-box: fill-box;
+  transform-origin: center center;
+}
+
+.animate-pipeline-laser {
+  stroke-dasharray: 10 18;
+  animation: pipelineLaserFlow 2.2s linear infinite;
+}
+
+.animate-thruster {
+  transform-origin: top center;
+  animation: thrusterFlicker 0.2s ease-in-out infinite;
+}
+
+.animate-astronaut-bob {
+  animation: astronautZeroGravityBob 4s ease-in-out infinite;
+}
+
+.animate-clip-glow {
+  animation: clipBadgeGlow 2.5s ease-in-out infinite;
+}
+
+@keyframes radarSweep {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes laserStream {
+  0% {
+    stroke-dashoffset: 200;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes cosmicDrift {
+  0% {
+    background-position: 0% 0%;
+  }
+  100% {
+    background-position: 100% 100%;
+  }
+}
+
+.animate-float-slow {
+  animation: floatSlow 5s ease-in-out infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulseGlow 3s ease-in-out infinite;
+}
+
+.animate-radar {
+  animation: radarSweep 8s linear infinite;
+}
+
+.animate-laser {
+  stroke-dasharray: 8 16;
+  animation: laserStream 1.5s linear infinite;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #09090b;
+}
+::-webkit-scrollbar-thumb {
+  background: #27272a;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3f3f46;
+}
+
+/* ========================================================================= */
+/* ALIEN ASTRONAUT CLIP JUGGLER & SPRING-ARM FRISBEE ANIMATIONS             */
+/* ========================================================================= */
+@keyframes alienBob {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes springArmStretchAndCatch {
+  0% {
+    transform: scaleX(0.25) rotate(0deg);
+  }
+  25% {
+    transform: scaleX(1.15) rotate(-3deg);
+  }
+  40% {
+    transform: scaleX(1.0) rotate(0deg);
+  }
+  70% {
+    transform: scaleX(0.3) rotate(4deg);
+  }
+  100% {
+    transform: scaleX(0.25) rotate(0deg);
+  }
+}
+
+@keyframes juggleClip1 {
+  0% {
+    transform: translate(-38px, 10px) rotate(-10deg) scale(0.92);
+    opacity: 0.95;
+  }
+  25% {
+    transform: translate(0px, -45px) rotate(0deg) scale(1.08);
+    opacity: 1;
+  }
+  50% {
+    transform: translate(38px, 10px) rotate(10deg) scale(0.92);
+    opacity: 0.95;
+  }
+  75% {
+    transform: translate(0px, 24px) rotate(0deg) scale(0.85);
+    opacity: 0.8;
+  }
+  100% {
+    transform: translate(-38px, 10px) rotate(-10deg) scale(0.92);
+    opacity: 0.95;
+  }
+}
+
+@keyframes juggleClip2 {
+  0% {
+    transform: translate(38px, 10px) rotate(10deg) scale(0.92);
+    opacity: 0.95;
+  }
+  25% {
+    transform: translate(0px, 24px) rotate(0deg) scale(0.85);
+    opacity: 0.8;
+  }
+  50% {
+    transform: translate(-38px, 10px) rotate(-10deg) scale(0.92);
+    opacity: 0.95;
+  }
+  75% {
+    transform: translate(0px, -45px) rotate(0deg) scale(1.08);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(38px, 10px) rotate(10deg) scale(0.92);
+    opacity: 0.95;
+  }
+}
+
+@keyframes juggleClip3 {
+  0% {
+    transform: translate(0px, -45px) rotate(0deg) scale(1.08);
+    opacity: 1;
+  }
+  25% {
+    transform: translate(38px, 10px) rotate(10deg) scale(0.92);
+    opacity: 0.95;
+  }
+  50% {
+    transform: translate(0px, 24px) rotate(0deg) scale(0.85);
+    opacity: 0.8;
+  }
+  75% {
+    transform: translate(-38px, 10px) rotate(-10deg) scale(0.92);
+    opacity: 0.95;
+  }
+  100% {
+    transform: translate(0px, -45px) rotate(0deg) scale(1.08);
+    opacity: 1;
+  }
+}
+
+@keyframes frisbeeSpinFlight {
+  0% {
+    transform: translate(0px, 0px) scale(0.95) rotate(0deg);
+    opacity: 1;
+  }
+  25% {
+    transform: translate(35px, -24px) scale(0.9) rotate(260deg);
+    opacity: 1;
+  }
+  65% {
+    transform: translate(115px, -42px) scale(0.8) rotate(720deg);
+    opacity: 0.95;
+  }
+  85% {
+    transform: translate(150px, -24px) scale(0.7) rotate(1080deg);
+    opacity: 0.9;
+  }
+  100% {
+    transform: translate(175px, -15px) scale(0.35) rotate(1260deg);
+    opacity: 0;
+  }
+}
+
+@keyframes frisbeeGlowTrail {
+  0% {
+    stroke-dashoffset: 200;
+    opacity: 0.2;
+  }
+  50% {
+    stroke-dashoffset: 0;
+    opacity: 0.9;
+  }
+  100% {
+    stroke-dashoffset: -200;
+    opacity: 0.1;
+  }
+}
+
+.animate-alien-bob {
+  animation: alienBob 3.5s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center center;
+}
+
+.juggle-card-1 {
+  animation: juggleClip1 3.2s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center center;
+}
+
+.juggle-card-2 {
+  animation: juggleClip2 3.2s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center center;
+}
+
+.juggle-card-3 {
+  animation: juggleClip3 3.2s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center center;
+}
+
+.animate-frisbee-spin {
+  animation: frisbeeSpinFlight 2.2s cubic-bezier(0.2, 0.8, 0.35, 1) infinite;
+  transform-box: fill-box;
+  transform-origin: center center;
+}
+
+/* ========================================================================= */
+/* FLAT SEMANTIC ARCHITECTURE: <main> ALS ZENTRALER LAYOUT-ROOT              */
+/* ========================================================================= */
+main.ui-shell {
+  display: grid;
+  height: 100vh;
+  min-height: 100vh;
+  grid-template-columns: 240px 1fr 280px;
+  grid-template-rows: auto 1fr auto;
+  grid-template-areas:
+    "nav     nav       nav"
+    "sidebar workspace inspector"
+    "status  status    status";
+  width: 100%;
+  overflow: hidden;
+}
+
+/* Direkte Zuweisung ohne Zwischen-Wrapper */
+main.ui-shell > nav,
+main.ui-shell > nav.ui-toolbar {
+  grid-area: nav;
+  display: flex;
+}
+
+main.ui-shell > aside.sidebar-controls {
+  grid-area: sidebar;
+  overflow-y: auto;
+}
+
+main.ui-shell > section#workspace,
+main.ui-shell > section {
+  grid-area: workspace;
+  overflow-y: auto;
+  min-width: 0;
+  scroll-behavior: smooth;
+}
+
+main.ui-shell > aside.inspector-panel {
+  grid-area: inspector;
+  overflow-y: auto;
+}
+
+main.ui-shell > output#status-bar,
+main.ui-shell > output {
+  grid-area: status;
+}
+
+@media (max-width: 1240px) {
+  main.ui-shell {
+    grid-template-columns: 220px 1fr;
+    grid-template-areas:
+      "nav     nav"
+      "sidebar workspace"
+      "status  status";
+  }
+  main.ui-shell > aside.inspector-panel {
+    display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  main.ui-shell {
+    display: flex;
+    flex-direction: column;
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
+  }
+  main.ui-shell > aside.sidebar-controls {
+    display: none;
+  }
+  main.ui-shell > aside.inspector-panel {
+    display: none;
+  }
+  main.ui-shell > section#workspace {
+    overflow: visible;
+  }
+}
+
+/* Dialog nutzt die native Browser-Top-Layer-Funktion */
+dialog::backdrop {
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(6px);
+}
+
+
+

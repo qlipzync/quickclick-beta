@@ -1,0 +1,78 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    function isMasterAdmin() {
+      return isAuthenticated() && (
+        (request.auth.token.email != null && request.auth.token.email.lower() == 'robert.f.telekom@gmail.com') ||
+        request.auth.token.admin == true ||
+        request.auth.token.role == 'admin'
+      );
+    }
+    function hasActiveSubscription(userId) {
+      return isMasterAdmin() || request.auth.token.subscribed == true || request.auth.token.hasActiveSubscription == true;
+    }
+
+    // Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isMasterAdmin();
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      allow update: if (
+        isOwner(userId) &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'role', 'isAdmin', 'subscriptionPlan', 'hasActiveSubscription', 'adminOverrideActive', 'clipsLimitTotal'
+        ])
+      ) || isMasterAdmin();
+      allow delete: if isMasterAdmin();
+    }
+
+    match /users/{userId}/integrations/{platform} {
+      allow read: if isOwner(userId) || isMasterAdmin();
+      allow write: if isMasterAdmin(); // Nur Backend darf verschlüsselte Tokens schreiben
+    }
+
+    match /users/{userId}/apiKeys/{keyId} {
+      allow read: if isOwner(userId) || isMasterAdmin();
+      allow write: if isMasterAdmin(); // Nur das sichere Cloud Run API Gateway darf Hashes schreiben/widerrufen
+    }
+
+    match /users/{userId}/channelConfigs/{configId} {
+      allow read: if isOwner(userId) || isMasterAdmin();
+      allow write: if (isOwner(userId) && hasActiveSubscription(userId)) || isMasterAdmin();
+    }
+
+    match /users/{userId}/wallet/{document=**} {
+      allow read: if isOwner(userId) || isMasterAdmin();
+      allow write: if false; // Ausschließlich über Cloud Run Backend Ledger veränderbar
+    }
+
+    match /users/{userId}/clips/{clipId} {
+      allow read, write: if isOwner(userId) || isMasterAdmin();
+    }
+
+    match /users/{userId}/invoices/{invoiceId} {
+      allow read: if isOwner(userId) || isMasterAdmin();
+      allow write: if isMasterAdmin();
+    }
+
+    match /clips/{clipId}/ai_metadata/{metaId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isMasterAdmin());
+      allow create: if isAuthenticated() && (request.resource.data.userId == request.auth.uid || isMasterAdmin());
+      allow update, delete: if isAuthenticated() && (resource.data.userId == request.auth.uid || isMasterAdmin());
+    }
+
+    match /bots/{botId}/logs/{logId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isMasterAdmin());
+      allow write: if isMasterAdmin();
+    }
+  }
+}

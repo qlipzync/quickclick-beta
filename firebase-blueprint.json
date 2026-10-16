@@ -1,0 +1,327 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Streamer account with subscription and clip credits balance",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth User UID"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Email address"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Streamer display name or Twitch handle"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["streamer", "admin"],
+          "description": "User access role"
+        },
+        "subscriptionPlan": {
+          "type": "string",
+          "enum": ["dynamic"],
+          "description": "Stufenloses Clip-Volumenmodell (1 bis 20.000 Clips via Regler)"
+        },
+        "dynamicPricingConfig": {
+          "type": "object",
+          "properties": {
+            "minClips": { "type": "number", "default": 1 },
+            "maxClips": { "type": "number", "default": 20000 }
+          }
+        },
+        "subscriptionTierLevel": {
+          "type": "number",
+          "description": "Modular tier level (1 to 5)"
+        },
+        "subscriptionStatus": {
+          "type": "string",
+          "enum": ["active", "trialing", "canceled", "past_due"],
+          "description": "Stripe subscription state"
+        },
+        "billingCycle": {
+          "type": "string",
+          "enum": ["monthly", "annual"],
+          "description": "Billing cadence"
+        },
+        "stripeCustomerId": {
+          "type": "string",
+          "description": "Stripe Customer ID"
+        },
+        "stripeSubscriptionId": {
+          "type": "string",
+          "description": "Stripe Subscription ID"
+        },
+        "clipBalance": {
+          "type": "number",
+          "description": "Remaining available clip balance"
+        },
+        "clipsUsedThisMonth": {
+          "type": "number",
+          "description": "Number of clips produced in current cycle"
+        },
+        "twoFactorEnabled": {
+          "type": "boolean",
+          "description": "Whether 2FA is verified for the user"
+        },
+        "dynamicPricingConfig": {
+          "type": "object",
+          "description": "Custom dynamic pricing configuration, clip volume, and quota"
+        },
+        "entitlements": {
+          "type": "object",
+          "description": "Feature flags, permission levels and channel gates"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "email", "subscriptionPlan", "clipBalance"]
+    },
+    "ChannelConfig": {
+      "title": "ChannelConfig",
+      "description": "Streamer personal channel connections (Twitch, Google Sheets, TikTok, Shorts)",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Owner UID"
+        },
+        "twitchChannel": {
+          "type": "string",
+          "description": "Connected Twitch channel username"
+        },
+        "twitchConnected": {
+          "type": "boolean"
+        },
+        "googleSheetId": {
+          "type": "string",
+          "description": "Personal Google Spreadsheet ID for 0 MB logging"
+        },
+        "googleDriveConnected": {
+          "type": "boolean"
+        },
+        "youtubeShortsConnected": {
+          "type": "boolean"
+        },
+        "tiktokConnected": {
+          "type": "boolean"
+        },
+        "instagramReelsConnected": {
+          "type": "boolean"
+        },
+        "discordWebhookConnected": {
+          "type": "boolean"
+        },
+        "telegramBotConnected": {
+          "type": "boolean"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["userId"]
+    },
+    "ClipLog": {
+      "title": "ClipLog",
+      "description": "Processed clip record synced to Google Sheets and multi-posted",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "userId": {
+          "type": "string"
+        },
+        "streamTitle": {
+          "type": "string"
+        },
+        "durationSeconds": {
+          "type": "number"
+        },
+        "aspectRatio": {
+          "type": "string",
+          "enum": ["9:16", "16:9", "1:1"]
+        },
+        "viralScore": {
+          "type": "number"
+        },
+        "renderedResolution": {
+          "type": "string"
+        },
+        "publishedPlatforms": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["rendered", "processing", "published", "failed"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "userId", "streamTitle", "status"]
+    },
+    "SubscriptionInvoice": {
+      "title": "SubscriptionInvoice",
+      "description": "Stripe invoice or payment receipt",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "userId": {
+          "type": "string"
+        },
+        "stripeInvoiceId": {
+          "type": "string"
+        },
+        "amountCents": {
+          "type": "number"
+        },
+        "currency": {
+          "type": "string"
+        },
+        "planName": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["paid", "pending", "failed"]
+        },
+        "invoiceUrl": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "userId", "amountCents", "status"]
+    },
+    "SecretConfig": {
+      "title": "SecretConfig",
+      "description": "Encrypted BYOK API credentials for Discord, Telegram, Twitch, and Social Media (server-only)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "encryptedData": { "type": "string", "description": "KMS encrypted payload" },
+        "serviceType": { "type": "string", "enum": ["discord", "telegram", "twitch", "youtube", "tiktok", "meta", "google_sheets"] },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "encryptedData", "serviceType"]
+    },
+    "VipWhitelistEntry": {
+      "title": "VipWhitelistEntry",
+      "description": "Admin VIP Whitelist entry for lifetime creator access",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "channelName": { "type": "string" },
+        "email": { "type": "string" },
+        "grantedTier": { "type": "number" },
+        "grantedPlanName": { "type": "string" },
+        "grantedBy": { "type": "string" },
+        "grantedAt": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "paused"] },
+        "notes": { "type": "string" }
+      },
+      "required": ["id", "channelName", "grantedTier", "status"]
+    },
+    "PendingStream": {
+      "title": "PendingStream",
+      "description": "Stream session with excess clips available for interactive dynamic email or web selection",
+      "type": "object",
+      "properties": {
+        "clipIds": { "type": "array", "items": { "type": "string" } },
+        "maxAvailable": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "claimed", "dismissed_by_user"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["maxAvailable"]
+    },
+    "StreamInvitation": {
+      "title": "StreamInvitation",
+      "description": "Live stream start and 20-minute reminder invitations distributed across social channels",
+      "type": "object",
+      "properties": {
+        "broadcasterId": { "type": "string" },
+        "broadcasterName": { "type": "string" },
+        "type": { "type": "string", "enum": ["initial_live_invite", "twenty_minute_reminder"] },
+        "game": { "type": "string" },
+        "title": { "type": "string" },
+        "viewers": { "type": "number" },
+        "channelsDispatched": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["broadcasterId", "broadcasterName", "type"]
+    },
+    "StreamPulse": {
+      "title": "StreamPulse",
+      "description": "10-minute heartbeat status information sent to Telegram and Discord bots",
+      "type": "object",
+      "properties": {
+        "broadcasterId": { "type": "string" },
+        "broadcasterName": { "type": "string" },
+        "pulseNumber": { "type": "number" },
+        "uptime": { "type": "string" },
+        "viewers": { "type": "number" },
+        "game": { "type": "string" },
+        "title": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["broadcasterId", "pulseNumber", "uptime"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Primary user profile document"
+    },
+    "/users/{userId}/channelConfigs/{configId}": {
+      "schema": "ChannelConfig",
+      "description": "User channel configuration subcollection"
+    },
+    "/users/{userId}/clips/{clipId}": {
+      "schema": "ClipLog",
+      "description": "User clip records subcollection"
+    },
+    "/users/{userId}/pending_streams/{streamId}": {
+      "schema": "PendingStream",
+      "description": "User stream backlog for interactive extra clips claim"
+    },
+    "/users/{userId}/stream_invitations/{inviteId}": {
+      "schema": "StreamInvitation",
+      "description": "Multi-channel live stream invitations and 20-minute reminders"
+    },
+    "/users/{userId}/stream_pulses/{pulseId}": {
+      "schema": "StreamPulse",
+      "description": "10-minute periodic stream information updates sent to bots"
+    },
+    "/users/{userId}/invoices/{invoiceId}": {
+      "schema": "SubscriptionInvoice",
+      "description": "User billing and invoice history subcollection"
+    },
+    "/users/{userId}/secrets/{secretId}": {
+      "schema": "SecretConfig",
+      "description": "User encrypted BYOK API keys and tokens (server-only access)"
+    },
+    "/vip_whitelist/{vipId}": {
+      "schema": "VipWhitelistEntry",
+      "description": "VIP creator whitelist entries"
+    }
+  }
+}
