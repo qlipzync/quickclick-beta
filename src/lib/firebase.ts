@@ -196,23 +196,94 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 
 export async function syncUserToFirestore(user: StreamerUser): Promise<void> {
   if (!user.id) return;
-  const safePayload = {
-    ...user,
-    updatedAt: new Date().toISOString(),
-  };
+
+  const isVerifiedMasterAdmin =
+    (auth.currentUser?.email || '').trim().toLowerCase() === 'robert.f.telekom@gmail.com';
+
+  const serverManagedFields = [
+    'role',
+    'isAdmin',
+    'isTitanVip',
+    'hasActiveSubscription',
+    'subscriptionPlan',
+    'subscriptionStatus',
+    'adminOverrideActive',
+    'clipsLimitTotal',
+    'apiCallsLimit',
+    'apiCallsUsedCount',
+    'clipsUsedCount',
+    'clipBalance',
+    'dailyClipCount',
+    'subscriptionTierLevel',
+    'billingCycle',
+    'stripeCustomerId',
+    'stripeSubscriptionId',
+  ];
 
   try {
-    // Primary sync to consolidated SaaS Prod DB (qlipzync-prod)
     const prodUserRef = doc(db.prod, 'users', user.id);
+    const existingUser = await getDoc(prodUserRef);
+    const safePayload: Record<string, unknown> = {
+      ...user,
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (!isVerifiedMasterAdmin) {
+      // Never let client-side state overwrite server-authoritative billing/RBAC values.
+      for (const field of serverManagedFields) {
+        delete safePayload[field];
+      }
+
+      // A new profile starts inactive with zero quotas; webhooks/backend grant entitlements.
+      if (!existingUser.exists()) {
+        Object.assign(safePayload, {
+          role: 'streamer',
+          isAdmin: false,
+          isTitanVip: false,
+          hasActiveSubscription: false,
+          subscriptionPlan: 'free',
+          subscriptionStatus: 'inactive',
+          adminOverrideActive: false,
+          clipsLimitTotal: 0,
+          apiCallsLimit: 0,
+          apiCallsUsedCount: 0,
+          clipsUsedCount: 0,
+          clipBalance: 0,
+          dailyClipCount: 0,
+          subscriptionTierLevel: 0,
+          plan: 'none',
+        });
+      }
+    }
+
     await setDoc(prodUserRef, safePayload, { merge: true });
   } catch (error) {
     console.debug('syncUserToFirestore (prod) notice:', error);
     try {
-      // Sandbox fallback for local dev staging
+      // Sandbox fallback for local development/staging only.
       const devUserRef = doc(db.dev, 'users', user.id);
-      await setDoc(devUserRef, safePayload, { merge: true });
-    } catch (e) {
-      console.warn('syncUserToFirestore fallback failed:', e);
+      await setDoc(devUserRef, {
+        id: user.id,
+        name: user.name,
+        displayName: user.displayName,
+        channelName: user.channelName,
+        email: user.email,
+        avatarUrl: user.avatarUrl,
+        settings: user.settings || {},
+        updatedAt: new Date().toISOString(),
+        role: 'streamer',
+        isAdmin: false,
+        isTitanVip: false,
+        hasActiveSubscription: false,
+        subscriptionPlan: 'free',
+        subscriptionStatus: 'inactive',
+        clipsLimitTotal: 0,
+        apiCallsLimit: 0,
+        clipBalance: 0,
+        dailyClipCount: 0,
+      }, { merge: true });
+    } catch (fallbackError) {
+      console.warn('syncUserToFirestore fallback failed:', fallbackError);
     }
   }
 }
