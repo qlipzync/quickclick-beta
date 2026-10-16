@@ -20,7 +20,7 @@ Autonome, hochgradig skalierbare Cloud- und Creator-SaaS-Plattform mit **Zero-St
         │                          • HTTP 403 Forbidden bei fehlendem/inaktivem Abonnement
         │                          • Stripe Webhook: Setzt admin.auth().setCustomUserClaims(uid)
         │
-        ├─► [ Firestore: qlipzync-prod / Cloud KMS ]
+        ├─► [ Firestore: ai-studio-quickclick-003fd948-cf64-489f-9030-863f460c6c91 / Cloud KMS ]
         │   • Row-Level Security (request.auth.uid == resource.data.userId)
         │   • Serverseitig KMS-verschlüsselte OAuth-Tokens (Twitch, YouTube, TikTok)
         │
@@ -38,7 +38,7 @@ Autonome, hochgradig skalierbare Cloud- und Creator-SaaS-Plattform mit **Zero-St
 
 | Instanz | ID | Region | Zweck & Vorteile |
 |---|---|---|---|
-| **Produktion (SaaS & KI)** | `qlipzync-prod` | `europe-west1` | **Zentrale SaaS-Kern-DB:** Nutzerprofile, Abonnements, Rechnungen, Kanalkonfigurationen, bearbeitete Clips und KI-Metadaten. **Vorteil:** Ermöglicht nahtlose `get()`- und `exists()`-Sicherheitsregeln ohne Cross-Database-Barrieren. |
+| **Produktion (SaaS & KI)** | `ai-studio-quickclick-003fd948-cf64-489f-9030-863f460c6c91` | `europe-west1` | **Zentrale SaaS-Kern-DB:** Nutzerprofile, Abonnements, Rechnungen, Kanalkonfigurationen, bearbeitete Clips und KI-Metadaten. **Vorteil:** Ermöglicht nahtlose `get()`- und `exists()`-Sicherheitsregeln ohne Cross-Database-Barrieren. |
 | **Entwicklung & Sandbox** | `(default)` | `europe-west1` | **Sandbox & CI/CD:** Lokales Testen, Staging und Prototyping mit täglichem No-Cost Free Tier (50k Read, 20k Write). |
 
 ---
@@ -80,7 +80,7 @@ Autonome, hochgradig skalierbare Cloud- und Creator-SaaS-Plattform mit **Zero-St
 
 ```bash
 # 1. Abhängigkeiten installieren
-npm install
+npm ci --legacy-peer-deps
 
 # 2. Entwicklungsserver starten (Vite Port 3000)
 npm run dev
@@ -88,7 +88,18 @@ npm run dev
 # 3. Produktions-Build erstellen
 npm run build
 
-# 4. Full-Stack Server starten
+# 4. Anwendungstests ausführen
+npm test
+
+# 5. Full-Stack Server starten
 npm run start
 ```
 
+
+
+## Production-readiness status
+
+The production entry point is `server.ts`, bundled to `dist/server.cjs` by `npm run build`.
+`server/index.ts` remains as a compatibility implementation until its route coverage has been compared; it is not removed as part of this hardening pass.
+
+CI validates the lockfile with `npm ci`, typechecks the code, runs application tests, builds the frontend and production server bundle, and builds the production container. Cloud Run deployment is manual and is permitted only from `main` after these checks pass. The GitHub Actions Workload Identity Federation binding and the live Firestore database ID/location must still be verified against Google Cloud before deployment.

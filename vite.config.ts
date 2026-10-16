@@ -2,7 +2,7 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import {defineConfig, Plugin} from 'vite';
-import {VertexAI} from '@google-cloud/vertexai';
+import {GoogleGenAI} from '@google/genai';
 import {
   analyzeClipWithQuickClickEngine,
   QUICKCLICK_ENGINE_SYSTEM_INSTRUCTION,
@@ -45,23 +45,18 @@ function geminiServerPlugin(): Plugin {
               const modelName =
                 process.env.VERTEX_AI_MODEL || 'gemini-1.5-flash-002';
 
-              const vertexAI = new VertexAI({
+              const genai = new GoogleGenAI({
+                vertexai: true,
                 project,
                 location,
               });
 
-              const generativeModel = vertexAI.getGenerativeModel({
+              const response = await genai.models.generateContent({
                 model: modelName,
-              });
-
-              const response = await generativeModel.generateContent({
                 contents: [{role: 'user', parts: [{text: prompt}]}],
               });
 
-              const replyText =
-                response.response?.candidates?.[0]?.content?.parts
-                  ?.map((part: any) => part.text || '')
-                  .join('') || '';
+              const replyText = response.text || '';
 
               res.writeHead(200, {'Content-Type': 'application/json'});
               res.end(
