@@ -52,6 +52,10 @@ jobs:
       - name: Unit and configuration regression tests
         run: npm test
 
+      - name: Build frontend and production server
+        run: npm run build
+
+
       - name: Setup Java 21 for Firebase Emulator
         uses: actions/setup-java@v4
         with:
@@ -63,9 +67,6 @@ jobs:
 
       - name: High and critical dependency audit
         run: npm audit --audit-level=high
-
-      - name: Build frontend and production server
-        run: npm run build
 
       - name: Build production Docker image
         run: docker build --tag quickclick-beta-ci .
