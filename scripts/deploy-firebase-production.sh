@@ -1,113 +1,32 @@
 #!/usr/bin/env bash
-# ==============================================================================
-# QlipZync - Firebase Hosting CDN & Firestore Rules Deployment Script
-# Projekt: qlipzync | Datenbank: ai-studio-quickclick-003fd948-cf64-489f-9030-863f460c6c91
-# ==============================================================================
+# Deploy only the already-reviewed Firebase configuration and Firestore rules.
+# This script intentionally does not rewrite firebase.json or firestore.rules.
 set -euo pipefail
 
 PROJECT_ID="qlipzync"
 FIRESTORE_DB="ai-studio-quickclick-003fd948-cf64-489f-9030-863f460c6c91"
 
-echo ">> [1/4] Schreibe optimierte firebase.json (Hosting-Rewrite auf Cloud Run)..."
-cat << 'FIREBASE_EOF' > firebase.json
-{
-  "hosting": {
-    "public": "dist",
-    "ignore": [
-      "firebase.json",
-      "**/.*",
-      "**/node_modules/**"
-    ],
-    "rewrites": [
-      {
-        "source": "/api/**",
-        "run": {
-          "serviceId": "quickclick-app",
-          "region": "europe-west3"
-        }
-      },
-      {
-        "source": "**",
-        "destination": "/index.html"
-      }
-    ]
-  },
-  "firestore": {
-    "database": "ai-studio-quickclick-003fd948-cf64-489f-9030-863f460c6c91",
-    "rules": "firestore.rules"
-  }
+command -v firebase >/dev/null 2>&1 || {
+  echo "ERROR: Firebase CLI is required (npm install -g firebase-tools)." >&2
+  exit 1
 }
-FIREBASE_EOF
-
-echo ">> [2/4] Schreibe gehärtete firestore.rules (Default-Deny, RBAC, Admin-Isolation)..."
-cat << 'RULES_EOF' > firestore.rules
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    function isAuthenticated() {
-      return request.auth != null;
-    }
-    function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
-    }
-    function isMasterAdmin() {
-      return isAuthenticated() && (
-        (request.auth.token.email != null && request.auth.token.email.lower() == 'robert.f.telekom@gmail.com') ||
-        request.auth.token.admin == true ||
-        request.auth.token.role == 'admin'
-      );
-    }
-    function hasActiveSubscription(userId) {
-      return isMasterAdmin() || request.auth.token.hasActiveSubscription == true;
-    }
-
-    // Default Deny
-    match /{document=**} {
-      allow read, write: if false;
-    }
-
-    match /users/{userId} {
-      allow read: if isOwner(userId) || isMasterAdmin();
-      allow create: if isAuthenticated() && request.auth.uid == userId;
-      allow update: if (
-        isOwner(userId) &&
-        !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-          'role', 'isAdmin', 'subscriptionPlan', 'hasActiveSubscription', 'adminOverrideActive', 'clipsLimitTotal'
-        ])
-      ) || isMasterAdmin();
-      allow delete: if isMasterAdmin();
-    }
-
-    match /users/{userId}/channelConfigs/{configId} {
-      allow read: if isOwner(userId) || isMasterAdmin();
-      allow write: if (isOwner(userId) && hasActiveSubscription(userId)) || isMasterAdmin();
-    }
-
-    match /users/{userId}/wallet/{document=**} {
-      allow read: if isOwner(userId) || isMasterAdmin();
-      allow write: if false; // Ausschließlich über Cloud Run Backend Ledger veränderbar
-    }
-
-    match /users/{userId}/clips/{clipId} {
-      allow read, write: if isOwner(userId) || isMasterAdmin();
-    }
-
-    match /users/{userId}/invoices/{invoiceId} {
-      allow read: if isOwner(userId) || isMasterAdmin();
-      allow write: if false;
-    }
-  }
+command -v node >/dev/null 2>&1 || {
+  echo "ERROR: Node.js is required to validate firebase.json." >&2
+  exit 1
 }
-RULES_EOF
 
-echo ">> [3/4] Hole GCP OAuth Access-Token für Firebase CLI..."
-ACCESS_TOKEN=$(gcloud auth print-access-token)
+if [[ ! -f firebase.json || ! -f firestore.rules ]]; then
+  echo "ERROR: Run this script from the repository root; firebase.json/firestore.rules missing." >&2
+  exit 1
+fi
 
-echo ">> [4/4] Deploye Firestore-Sicherheitsregeln & Firebase Hosting Edge-CDN..."
-GOOGLE_OAUTH_ACCESS_TOKEN="${ACCESS_TOKEN}" firebase deploy --only firestore:rules --project "${PROJECT_ID}"
-GOOGLE_OAUTH_ACCESS_TOKEN="${ACCESS_TOKEN}" firebase deploy --only hosting --project "${PROJECT_ID}"
+CONFIGURED_DB="$(node -e "process.stdout.write(require('./firebase.json').firestore?.database || '')")"
+if [[ "$CONFIGURED_DB" != "$FIRESTORE_DB" ]]; then
+  echo "ERROR: firebase.json targets '$CONFIGURED_DB', expected '$FIRESTORE_DB'. No deployment performed." >&2
+  exit 1
+fi
 
-echo "================================================================="
-echo "   FIREBASE SYSTEM-DEPLOYMENT ERFOLGREICH ABGESCHLOSSEN!        "
-echo "   Hosting CDN URL: https://qlipzync.web.app                    "
-echo "================================================================="
+echo "Deploying reviewed Firestore rules and Hosting configuration to ${PROJECT_ID}."
+echo "Firestore database: ${FIRESTORE_DB}"
+firebase deploy --only firestore:rules,hosting --project "$PROJECT_ID" --non-interactive
+echo "Firebase deployment command completed."
