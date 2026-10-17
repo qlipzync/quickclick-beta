@@ -87,38 +87,70 @@ subscriptionRouter.post('/checkout', verifyAuth, async (req: Request, res: Respo
   }
 });
 
-// 3. Stripe Webhook: Setzt serverseitig das Custom Claim via Firebase Admin SDK
+// 3. Stripe subscription webhook. Raw bytes and a valid signature are mandatory.
+const subscriptionWebhookEvents = db.collection('_stripeSubscriptionWebhookEvents');
+
 export async function handleStripeWebhook(req: Request, res: Response): Promise<void> {
   const stripe = getStripe();
-  if (!stripe) {
-    res.status(503).json({ error: 'Stripe nicht konfiguriert' });
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  const signature = req.headers['stripe-signature'];
+  const rawBody = (req as Request & { rawBody?: Buffer }).rawBody;
+
+  if (!stripe || !webhookSecret || typeof signature !== 'string' || !Buffer.isBuffer(rawBody) || rawBody.length === 0) {
+    res.status(503).json({ error: 'STRIPE_WEBHOOK_NOT_CONFIGURED' });
     return;
   }
 
-  const sig = req.headers['stripe-signature'] as string;
   let event: Stripe.Event;
-
   try {
-    const rawBody = (req as any).rawBody || req.body;
-    event = stripe.webhooks.constructEvent(
-      rawBody,
-      sig,
-      process.env.STRIPE_WEBHOOK_SECRET || ''
-    );
-  } catch (err: any) {
-    console.error('[Subscription Webhook Error]:', err.message);
-    res.status(400).send(`Webhook Error: ${err.message}`);
+    event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
+  } catch {
+    res.status(400).json({ error: 'INVALID_STRIPE_SIGNATURE' });
     return;
   }
 
+  const eventRef = subscriptionWebhookEvents.doc(event.id);
   try {
-    switch (event.type) {
-      case 'checkout.session.completed': {
-        const session = event.data.object as Stripe.Checkout.Session;
-        const uid = session.client_reference_id || session.metadata?.userId;
+    const claim = await db.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(eventRef);
+      if (snapshot.exists && snapshot.data()?.status === 'processed') return 'duplicate' as const;
+      if (snapshot.exists && snapshot.data()?.status === 'processing') return 'processing' as const;
+      transaction.set(eventRef, {
+        type: event.type,
+        status: 'processing',
+        attempts: FieldValue.increment(1),
+        updatedAt: FieldValue.serverTimestamp(),
+        livemode: event.livemode,
+      }, { merge: true });
+      return 'claimed' as const;
+    });
 
-        if (uid) {
-          // Custom Claim setzen -> Berechtigt sofort alle Routen mit requireSubscription
+    if (claim === 'duplicate') {
+      res.status(200).json({ received: true, duplicate: true });
+      return;
+    }
+    if (claim === 'processing') {
+      res.status(409).json({ error: 'STRIPE_EVENT_PROCESSING' });
+      return;
+    }
+
+    try {
+      switch (event.type) {
+        case 'checkout.session.completed': {
+          const session = event.data.object as Stripe.Checkout.Session;
+          if (
+            session.mode !== 'subscription' ||
+            session.status !== 'complete' ||
+            !['paid', 'no_payment_required'].includes(session.payment_status)
+          ) {
+            throw new Error('SUBSCRIPTION_CHECKOUT_NOT_PAID');
+          }
+
+          const uid = session.client_reference_id;
+          if (!uid || !session.metadata?.userId || session.metadata.userId !== uid) {
+            throw new Error('SUBSCRIPTION_CHECKOUT_USER_MISMATCH');
+          }
+
           await getAuth().setCustomUserClaims(uid, {
             subscribed: true,
             hasActiveSubscription: true,
@@ -126,57 +158,67 @@ export async function handleStripeWebhook(req: Request, res: Response): Promise<
             tier: 'pro',
           });
 
-          await db.collection('users').doc(uid).set(
-            {
-              hasActiveSubscription: true,
-              subscriptionStatus: 'active',
-              subscriptionPlan: 'pro',
-              stripeCustomerId: session.customer,
-              stripeSubscriptionId: session.subscription,
-              updatedAt: FieldValue.serverTimestamp(),
-            },
-            { merge: true }
-          );
-          console.log(`[Stripe Webhook] Custom Claims & Firestore updated for User ${uid}: subscribed=true`);
-        }
-        break;
-      }
-
-      case 'customer.subscription.deleted': {
-        const subscription = event.data.object as Stripe.Subscription;
-        const snapshot = await db
-          .collection('users')
-          .where('stripeSubscriptionId', '==', subscription.id)
-          .limit(1)
-          .get();
-
-        if (!snapshot.empty) {
-          const userDoc = snapshot.docs[0];
-          const uid = userDoc.id;
-
-          // Custom Claim entziehen
-          await getAuth().setCustomUserClaims(uid, {
-            subscribed: false,
-            hasActiveSubscription: false,
-            subscriptionTier: 'free',
-            tier: 'free',
-          });
-
-          await userDoc.ref.update({
-            hasActiveSubscription: false,
-            subscriptionStatus: 'canceled',
-            subscriptionPlan: 'free',
+          await db.collection('users').doc(uid).set({
+            hasActiveSubscription: true,
+            subscriptionStatus: 'active',
+            subscriptionPlan: 'pro',
+            stripeCustomerId: typeof session.customer === 'string' ? session.customer : null,
+            stripeSubscriptionId: typeof session.subscription === 'string' ? session.subscription : null,
             updatedAt: FieldValue.serverTimestamp(),
-          });
-          console.log(`[Stripe Webhook] Subscription canceled for User ${uid}: subscribed=false`);
+          }, { merge: true });
+          break;
         }
-        break;
-      }
-    }
 
-    res.status(200).json({ received: true });
-  } catch (procErr: any) {
-    console.error('[Subscription Webhook Processing Error]:', procErr);
+        case 'customer.subscription.deleted': {
+          const subscription = event.data.object as Stripe.Subscription;
+          const snapshot = await db.collection('users')
+            .where('stripeSubscriptionId', '==', subscription.id)
+            .limit(1)
+            .get();
+
+          if (!snapshot.empty) {
+            const userDoc = snapshot.docs[0];
+            const uid = userDoc.id;
+            const authUser = await getAuth().getUser(uid);
+            await getAuth().setCustomUserClaims(uid, {
+              ...(authUser.customClaims || {}),
+              subscribed: false,
+              hasActiveSubscription: false,
+              subscriptionTier: 'free',
+              tier: 'free',
+            });
+            await userDoc.ref.update({
+              hasActiveSubscription: false,
+              subscriptionStatus: 'canceled',
+              subscriptionPlan: 'free',
+              updatedAt: FieldValue.serverTimestamp(),
+            });
+          }
+          break;
+        }
+
+        default:
+          // Acknowledge irrelevant, but validly signed events without side effects.
+          break;
+      }
+
+      await eventRef.set({
+        type: event.type,
+        status: 'processed',
+        processedAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+      res.status(200).json({ received: true });
+    } catch (processingError) {
+      await eventRef.set({
+        status: 'error',
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+      console.error('[Subscription Webhook Processing Error]', processingError);
+      res.status(500).json({ error: 'WEBHOOK_PROCESSING_FAILED' });
+    }
+  } catch (error) {
+    console.error('[Subscription Webhook Idempotency Error]', error);
     res.status(500).json({ error: 'WEBHOOK_PROCESSING_FAILED' });
   }
 }
