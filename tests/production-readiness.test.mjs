@@ -47,7 +47,7 @@ test('Firestore rules retain default deny and block client privilege escalation'
 
 test('production container entrypoint exists in the build contract', () => {
   assert.match(pkg.scripts.build, /esbuild server\.ts .*--outfile=dist\/server\.cjs/);
-  assert.equal(pkg.scripts.start, 'node dist/server.cjs');
+  assert.equal(pkg.scripts.start, 'node dist/server.js');
   assert.match(dockerfile, /test -f dist\/server\.cjs/);
   assert.match(dockerfile, /CMD \["node", "dist\/server\.cjs"\]/);
   assert.match(dockerfile, /npm ci --legacy-peer-deps/);
