@@ -9,7 +9,7 @@
     "start": "node dist/server.js",
     "preview": "vite preview",
     "lint": "tsc --noEmit",
-    "test": "NODE_ENV=test node --import tsx --test tests/server.test.ts tests/production-readiness.test.mjs",
+    "test": "NODE_ENV=test node --import tsx --test tests/server.test.ts tests/production-readiness.test.mjs tests/stripe-production-safety.test.mjs",
     "test:rules": "node --test tests/firestore.rules.test.mjs",
     "test:ci": "npm run lint && npm test && npm run test:rules"
   },
