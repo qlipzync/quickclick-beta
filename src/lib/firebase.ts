@@ -46,8 +46,8 @@ const effectiveConfig = {
 // 1. Firebase App initialisieren
 export const app = getApps().length === 0 ? initializeApp(effectiveConfig) : getApp();
 
-// 2. Das optimale 2-Datenbanken-Setup (qlipzync-prod & (default)):
-// - qlipzync-prod: Konsolidierte SaaS-Produktionsumgebung (Nutzer, Rechnungen, Clips & KI-Metadaten)
+// 2. Das optimale 2-Datenbanken-Setup (ai-studio-quickclick-003fd948-cf64-489f-9030-863f460c6c91 & (default)):
+// - ai-studio-quickclick-003fd948-cf64-489f-9030-863f460c6c91: Konsolidierte SaaS-Produktionsumgebung (Nutzer, Rechnungen, Clips & KI-Metadaten)
 // - (default): Entwicklung, Staging & Sandbox mit No-Cost Free Tier
 export const databases = {
   // Kern-Produktion für alle SaaS-Live-Nutzer, Rechnungen & KI-Metadaten (europe-west1)
@@ -56,7 +56,7 @@ export const databases = {
   // Entwicklung, Staging & Testdaten (Greift auf die Standarddatenbank zu mit No-Cost Free Tier)
   dev: getFirestore(app),
 
-  // Nahtlose Kompatibilitäts-Aliase: Verweisen direkt auf die konsolidierte qlipzync-prod Instanz
+  // Nahtlose Kompatibilitäts-Aliase: Verweisen direkt auf die konsolidierte ai-studio-quickclick-003fd948-cf64-489f-9030-863f460c6c91 Instanz
   get aiStudio(): Firestore {
     return this.prod;
   },
@@ -85,7 +85,7 @@ export interface MultiDbFirestore extends Firestore {
  * Konsolidierte Firestore-Instanz:
  * Bietet sowohl den typisierten Zugriff (db.prod, db.dev) als auch
  * direkte Kompatibilität mit Standard-Firestore-Aufrufen wie doc(db, 'users', id),
- * die transparent auf die zentrale Produktions-DB qlipzync-prod zugreifen.
+ * die transparent auf die zentrale Produktions-DB ai-studio-quickclick-003fd948-cf64-489f-9030-863f460c6c91 zugreifen.
  */
 export const db: MultiDbFirestore = new Proxy(databases.prod as unknown as MultiDbFirestore, {
   get(target, prop, receiver) {
@@ -98,10 +98,10 @@ export const db: MultiDbFirestore = new Proxy(databases.prod as unknown as Multi
 
 export const auth = getAuth(app);
 
-// --- Modul-spezifische Helper-Funktionen (In qlipzync-prod konsolidiert) ---
+// --- Modul-spezifische Helper-Funktionen (In ai-studio-quickclick-003fd948-cf64-489f-9030-863f460c6c91 konsolidiert) ---
 
 /**
- * Beispiel A: Nutzer rechnet ein Abo ab -> Speichern in qlipzync-prod
+ * Beispiel A: Nutzer rechnet ein Abo ab -> Speichern in ai-studio-quickclick-003fd948-cf64-489f-9030-863f460c6c91
  */
 export async function createInvoice(userId: string, invoiceData: Record<string, unknown>) {
   const invoiceRef = collection(db.prod, `users/${userId}/invoices`);
@@ -112,7 +112,7 @@ export async function createInvoice(userId: string, invoiceData: Record<string, 
 }
 
 /**
- * Beispiel B: KI-Studio-Modul generiert Clip-Tags -> Speichern in qlipzync-prod
+ * Beispiel B: KI-Studio-Modul generiert Clip-Tags -> Speichern in ai-studio-quickclick-003fd948-cf64-489f-9030-863f460c6c91
  * Durch die Konsolidierung können Security Rules direkt per get() prüfen, ob der User ein Abo hat!
  */
 export async function saveClipMetadata(clipId: string, tags: Record<string, unknown>) {
@@ -124,7 +124,7 @@ export async function saveClipMetadata(clipId: string, tags: Record<string, unkn
 }
 
 /**
- * Beispiel C: Autonome Agenten-Aktionen -> Speichern in qlipzync-prod
+ * Beispiel C: Autonome Agenten-Aktionen -> Speichern in ai-studio-quickclick-003fd948-cf64-489f-9030-863f460c6c91
  */
 export async function logAutonomousAction(botId: string, actionData: Record<string, unknown>) {
   const botRef = collection(db.prod, `bots/${botId}/logs`);
@@ -195,25 +195,32 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 })();
 
 export async function syncUserToFirestore(user: StreamerUser): Promise<void> {
-  if (!user.id) return;
-  const safePayload = {
-    ...user,
-    updatedAt: new Date().toISOString(),
-  };
+  // A Firestore owner document is keyed by the verified Firebase UID, not the external Twitch ID.
+  const firebaseUid = auth.currentUser?.uid;
+  if (!firebaseUid) {
+    console.debug('Firestore sync skipped: no authenticated Firebase user is available.');
+    return;
+  }
 
+  const serverControlledFields = new Set([
+    'role', 'isAdmin', 'isTitanVip', 'hasActiveSubscription', 'plan',
+    'clipsLimitTotal', 'apiCallsLimit', 'clipsUsedCount', 'apiCallsUsedCount',
+    'subscriptionPlan', 'subscriptionTier', 'tier', 'subscribed', 'subscriptionStatus',
+    'subscriptionTierLevel', 'adminOverrideActive', 'dailyClipCount', 'clipBalance',
+    'stripeCustomerId', 'stripeSubscriptionId', 'billingCycle', 'entitlements', 'vipAccess',
+  ]);
+  const safePayload = Object.fromEntries(
+    Object.entries(user).filter(([key]) => !serverControlledFields.has(key))
+  ) as Record<string, unknown>;
+  safePayload.uid = firebaseUid;
+  safePayload.updatedAt = new Date().toISOString();
+
+  // Never divert production data into the default development database on a write failure.
   try {
-    // Primary sync to consolidated SaaS Prod DB (qlipzync-prod)
-    const prodUserRef = doc(db.prod, 'users', user.id);
+    const prodUserRef = doc(db.prod, 'users', firebaseUid);
     await setDoc(prodUserRef, safePayload, { merge: true });
   } catch (error) {
-    console.debug('syncUserToFirestore (prod) notice:', error);
-    try {
-      // Sandbox fallback for local dev staging
-      const devUserRef = doc(db.dev, 'users', user.id);
-      await setDoc(devUserRef, safePayload, { merge: true });
-    } catch (e) {
-      console.warn('syncUserToFirestore fallback failed:', e);
-    }
+    console.error('syncUserToFirestore (production) failed:', error);
   }
 }
 
