@@ -366,7 +366,7 @@ app.use(cors({
 }));
 
 app.use((req: Request, res: Response, next: NextFunction) => {
-  if (req.originalUrl.includes('/webhooks/') || req.originalUrl.includes('/stripe/')) {
+  if (req.originalUrl.includes('/webhooks/') || req.originalUrl.includes('/stripe/') || req.originalUrl.includes('/subscription/webhook')) {
     let data = Buffer.from('');
     req.on('data', (chunk) => {
       data = Buffer.concat([data, chunk]);
