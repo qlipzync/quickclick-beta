@@ -45,6 +45,10 @@ jobs:
       - name: 'Run unit and configuration regression tests'
         run: npm test
 
+      - name: 'Build frontend and production server'
+        run: npm run build
+
+
       - name: 'Setup Java 21 for Firebase Emulator'
         uses: actions/setup-java@v4
         with:
@@ -53,9 +57,6 @@ jobs:
 
       - name: 'Run Firestore rules emulator tests'
         run: npx --yes firebase-tools@latest emulators:exec --only firestore --project demo-quickclick-beta "npm run test:rules"
-
-      - name: 'Build frontend and production server'
-        run: npm run build
 
       - name: 'Validate production Docker build'
         run: docker build --tag quickclick-beta-predeploy .
