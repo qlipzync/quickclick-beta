@@ -342,7 +342,8 @@ export async function processVideoClip(videoFileBuffer?: Buffer) {
 }
 
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const runtimeDirname = path.dirname(__filename);
+const __dirname = path.basename(runtimeDirname) === 'dist' ? path.resolve(runtimeDirname, '..') : runtimeDirname;
 
 const app = express();
 const PORT = process.env.PORT || 3000;
