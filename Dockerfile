@@ -23,7 +23,7 @@ ENV NODE_OPTIONS="--max-old-space-size=2048"
 RUN npm run build
 
 # Validate compilation artifacts
-RUN test -f dist/server.cjs && test -f dist/index.html || (echo "Build error: missing artifacts in dist/" && exit 1)
+RUN test -f dist/server.js && test -f dist/index.html || (echo "Build error: missing artifacts in dist/" && exit 1)
 
 # ------------------------------------------------------------------------------
 # Stage 2: Production Minimal Runner Stage
@@ -56,4 +56,4 @@ USER node
 EXPOSE 3000
 
 # Launch optimized bundled production server
-CMD ["node", "dist/server.cjs"]
+CMD ["node", "dist/server.js"]
