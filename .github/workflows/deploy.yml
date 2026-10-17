@@ -15,6 +15,7 @@ env:
   REGION: 'europe-west3'
   SERVICE: 'quickclick-app'
   SERVICE_ACCOUNT: 'qlipzync-runner@qlipzync.iam.gserviceaccount.com'
+  FIRESTORE_DB: 'ai-studio-quickclick-003fd948-cf64-489f-9030-863f460c6c91'
 
 jobs:
   deploy:
@@ -36,13 +37,22 @@ jobs:
           cache: 'npm'
 
       - name: 'Install Dependencies'
-        run: npm install --legacy-peer-deps
+        run: npm ci --legacy-peer-deps
 
       - name: 'Run Typecheck & Lint'
         run: npm run lint
 
-      - name: 'Build Vite SPA Frontend (dist/)'
+      - name: 'Run unit and configuration regression tests'
+        run: npm test
+
+      - name: 'Run Firestore rules emulator tests'
+        run: npx --yes firebase-tools@latest emulators:exec --only firestore --project demo-quickclick-beta "npm run test:rules"
+
+      - name: 'Build frontend and production server'
         run: npm run build
+
+      - name: 'Validate production Docker build'
+        run: docker build --tag quickclick-beta-predeploy .
 
       # Authentifizierung: Bevorzugt schlüsselloses WIF, mit direktem SA-Key-Fallback falls als Secret hinterlegt
       - id: 'auth-wif'
@@ -76,4 +86,4 @@ jobs:
             --cpu 1 \
             --min-instances 0 \
             --max-instances 10 \
-            --set-env-vars NODE_ENV=production
+            --set-env-vars "NODE_ENV=production,GCP_PROJECT=${{ env.PROJECT_ID }},GCP_REGION=${{ env.REGION }},FIRESTORE_DB=${{ env.FIRESTORE_DB }}"
