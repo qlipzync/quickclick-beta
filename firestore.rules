@@ -4,9 +4,11 @@ service cloud.firestore {
     function isAuthenticated() {
       return request.auth != null;
     }
+
     function isOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
     }
+
     function isMasterAdmin() {
       return isAuthenticated() && (
         (request.auth.token.email != null && request.auth.token.email.lower() == 'robert.f.telekom@gmail.com') ||
@@ -14,35 +16,71 @@ service cloud.firestore {
         request.auth.token.role == 'admin'
       );
     }
+
     function hasActiveSubscription(userId) {
       return isMasterAdmin() || request.auth.token.subscribed == true || request.auth.token.hasActiveSubscription == true;
     }
 
-    // Default Deny
+    function protectedUserFields() {
+      return [
+        'role', 'isAdmin', 'isTitanVip', 'admin', 'plan', 'subscriptionPlan',
+        'subscriptionTier', 'tier', 'hasActiveSubscription', 'subscribed',
+        'subscriptionStatus', 'subscriptionTierLevel', 'adminOverrideActive',
+        'clipsLimitTotal', 'dailyClipCount', 'clipBalance', 'apiCallsLimit',
+        'clipsUsedCount', 'apiCallsUsedCount', 'stripeCustomerId',
+        'stripeSubscriptionId', 'billingCycle', 'entitlements', 'vipAccess'
+      ];
+    }
+
+    function safeUserCreate() {
+      let data = request.resource.data;
+      return
+        (!('uid' in data) || data.uid == request.auth.uid) &&
+        (!('role' in data) || data.role == 'streamer') &&
+        (!('isAdmin' in data) || data.isAdmin == false) &&
+        (!('isTitanVip' in data) || data.isTitanVip == false) &&
+        (!('admin' in data) || data.admin == false) &&
+        (!('hasActiveSubscription' in data) || data.hasActiveSubscription == false) &&
+        (!('subscribed' in data) || data.subscribed == false) &&
+        (!('subscriptionPlan' in data) || data.subscriptionPlan == 'free') &&
+        (!('subscriptionTier' in data) || data.subscriptionTier == 'free') &&
+        (!('tier' in data) || data.tier == 'free') &&
+        (!('plan' in data) || data.plan == 'none') &&
+        (!('subscriptionStatus' in data) || data.subscriptionStatus in ['inactive', 'canceled', 'free']) &&
+        (!('subscriptionTierLevel' in data) || data.subscriptionTierLevel == 0) &&
+        (!('adminOverrideActive' in data) || data.adminOverrideActive == false) &&
+        (!('clipsLimitTotal' in data) || data.clipsLimitTotal == 0) &&
+        (!('dailyClipCount' in data) || data.dailyClipCount == 0) &&
+        (!('clipBalance' in data) || data.clipBalance == 0) &&
+        (!('apiCallsLimit' in data) || data.apiCallsLimit == 0) &&
+        (!('clipsUsedCount' in data) || data.clipsUsedCount == 0) &&
+        (!('apiCallsUsedCount' in data) || data.apiCallsUsedCount == 0) &&
+        !data.keys().hasAny(['stripeCustomerId', 'stripeSubscriptionId', 'billingCycle', 'entitlements', 'vipAccess']);
+    }
+
+    // Default deny.
     match /{document=**} {
       allow read, write: if false;
     }
 
     match /users/{userId} {
       allow read: if isOwner(userId) || isMasterAdmin();
-      allow create: if isAuthenticated() && request.auth.uid == userId;
+      allow create: if isOwner(userId) && safeUserCreate();
       allow update: if (
         isOwner(userId) &&
-        !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-          'role', 'isAdmin', 'subscriptionPlan', 'hasActiveSubscription', 'adminOverrideActive', 'clipsLimitTotal'
-        ])
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(protectedUserFields())
       ) || isMasterAdmin();
       allow delete: if isMasterAdmin();
     }
 
     match /users/{userId}/integrations/{platform} {
       allow read: if isOwner(userId) || isMasterAdmin();
-      allow write: if isMasterAdmin(); // Nur Backend darf verschlüsselte Tokens schreiben
+      allow write: if isMasterAdmin();
     }
 
     match /users/{userId}/apiKeys/{keyId} {
       allow read: if isOwner(userId) || isMasterAdmin();
-      allow write: if isMasterAdmin(); // Nur das sichere Cloud Run API Gateway darf Hashes schreiben/widerrufen
+      allow write: if isMasterAdmin();
     }
 
     match /users/{userId}/channelConfigs/{configId} {
@@ -52,7 +90,7 @@ service cloud.firestore {
 
     match /users/{userId}/wallet/{document=**} {
       allow read: if isOwner(userId) || isMasterAdmin();
-      allow write: if false; // Ausschließlich über Cloud Run Backend Ledger veränderbar
+      allow write: if false;
     }
 
     match /users/{userId}/clips/{clipId} {
