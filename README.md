@@ -20,7 +20,7 @@ Autonome, hochgradig skalierbare Cloud- und Creator-SaaS-Plattform mit **Zero-St
         │                          • HTTP 403 Forbidden bei fehlendem/inaktivem Abonnement
         │                          • Stripe Webhook: Setzt admin.auth().setCustomUserClaims(uid)
         │
-        ├─► [ Firestore: qlipzync-prod / Cloud KMS ]
+        ├─► [ Firestore: ai-studio-quickclick-003fd948-cf64-489f-9030-863f460c6c91 / Cloud KMS ]
         │   • Row-Level Security (request.auth.uid == resource.data.userId)
         │   • Serverseitig KMS-verschlüsselte OAuth-Tokens (Twitch, YouTube, TikTok)
         │
@@ -38,7 +38,7 @@ Autonome, hochgradig skalierbare Cloud- und Creator-SaaS-Plattform mit **Zero-St
 
 | Instanz | ID | Region | Zweck & Vorteile |
 |---|---|---|---|
-| **Produktion (SaaS & KI)** | `qlipzync-prod` | `europe-west1` | **Zentrale SaaS-Kern-DB:** Nutzerprofile, Abonnements, Rechnungen, Kanalkonfigurationen, bearbeitete Clips und KI-Metadaten. **Vorteil:** Ermöglicht nahtlose `get()`- und `exists()`-Sicherheitsregeln ohne Cross-Database-Barrieren. |
+| **Produktion (SaaS & KI)** | `ai-studio-quickclick-003fd948-cf64-489f-9030-863f460c6c91` | `europe-west1` | **Zentrale SaaS-Kern-DB:** Nutzerprofile, Abonnements, Rechnungen, Kanalkonfigurationen, bearbeitete Clips und KI-Metadaten. **Vorteil:** Ermöglicht nahtlose `get()`- und `exists()`-Sicherheitsregeln ohne Cross-Database-Barrieren. |
 | **Entwicklung & Sandbox** | `(default)` | `europe-west1` | **Sandbox & CI/CD:** Lokales Testen, Staging und Prototyping mit täglichem No-Cost Free Tier (50k Read, 20k Write). |
 
 ---

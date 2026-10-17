@@ -5,11 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && esbuild server/services/gemini.ts --outfile=server/services/gemini.js --format=esm --platform=node --bundle --packages=external && esbuild server/middleware/authMiddleware.ts --outfile=server/middleware/authMiddleware.js --format=esm --platform=node --packages=external && esbuild server/schemas/quickClick.schema.ts --outfile=server/schemas/quickClick.schema.js --format=esm --platform=node --packages=external && esbuild server/services/kmsService.ts --outfile=server/services/kmsService.js --format=esm --platform=node --packages=external && esbuild server/routes/platform.routes.ts --outfile=server/routes/platform.routes.js --format=esm --platform=node --packages=external && esbuild server/routes/subscription.routes.ts --outfile=server/routes/subscription.routes.js --format=esm --platform=node --packages=external && esbuild server/routes/apiKeys.routes.ts --outfile=server/routes/apiKeys.routes.js --format=esm --platform=node --packages=external && esbuild server/routes/stripe.ts --outfile=server/routes/stripe.js --format=esm --platform=node --packages=external && esbuild server/routes/topupRoute.ts --outfile=server/routes/topupRoute.js --format=esm --platform=node --packages=external",
-    "start": "node server.ts",
+    "build": "vite build && esbuild server/services/gemini.ts --outfile=server/services/gemini.js --format=esm --platform=node --bundle --packages=external && esbuild server/middleware/authMiddleware.ts --outfile=server/middleware/authMiddleware.js --format=esm --platform=node --packages=external && esbuild server/schemas/quickClick.schema.ts --outfile=server/schemas/quickClick.schema.js --format=esm --platform=node --packages=external && esbuild server/services/kmsService.ts --outfile=server/services/kmsService.js --format=esm --platform=node --packages=external && esbuild server/routes/platform.routes.ts --outfile=server/routes/platform.routes.js --format=esm --platform=node --packages=external && esbuild server/routes/subscription.routes.ts --outfile=server/routes/subscription.routes.js --format=esm --platform=node --packages=external && esbuild server/routes/apiKeys.routes.ts --outfile=server/routes/apiKeys.routes.js --format=esm --platform=node --packages=external && esbuild server/routes/stripe.ts --outfile=server/routes/stripe.js --format=esm --platform=node --packages=external && esbuild server/routes/topupRoute.ts --outfile=server/routes/topupRoute.js --format=esm --platform=node --packages=external && esbuild server.ts --outfile=dist/server.js --format=esm --platform=node --bundle --packages=external --target=node22",
+    "start": "node dist/server.js",
     "preview": "vite preview",
     "lint": "tsc --noEmit",
-    "test": "tsc --noEmit"
+    "test": "NODE_ENV=test node --import tsx --test tests/server.test.ts tests/production-readiness.test.mjs",
+    "test:rules": "node --test tests/firestore.rules.test.mjs",
+    "test:ci": "npm run lint && npm test && npm run test:rules"
   },
   "dependencies": {
     "@google-cloud/tasks": "^7.2.1",
@@ -49,6 +51,11 @@
     "globals": "^17.12.0",
     "tsx": "^4.23.13",
     "typescript": "^5.7.3",
-    "typescript-eslint": "^8.70.1"
+    "typescript-eslint": "^8.70.1",
+    "@firebase/rules-unit-testing": "^4.0.1"
+  },
+  "overrides": {
+    "@grpc/grpc-js": "^1.14.6",
+    "uuid": "^11.1.1"
   }
 }

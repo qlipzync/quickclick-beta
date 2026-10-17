@@ -7,7 +7,7 @@ import { generateSecureApiKey } from '../utils/apiKey.util.js';
 
 export const apiKeyRouter = Router();
 
-const FIRESTORE_DB_ID = process.env.FIRESTORE_DB || 'qlipzync-prod';
+const FIRESTORE_DB_ID = process.env.FIRESTORE_DB || 'ai-studio-quickclick-003fd948-cf64-489f-9030-863f460c6c91';
 const db = getFirestore(FIRESTORE_DB_ID);
 
 export interface ApiKeyItem {

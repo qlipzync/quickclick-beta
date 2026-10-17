@@ -9,7 +9,7 @@ import { resolveDirectMp4Url, generateClipMetadata } from '../services/clipPipel
 export const clipsRouter = Router();
 
 // Verbindliche Datenbank-ID (Single Source of Truth)
-const FIRESTORE_DB_ID = process.env.FIRESTORE_DB || 'qlipzync-prod';
+const FIRESTORE_DB_ID = process.env.FIRESTORE_DB || 'ai-studio-quickclick-003fd948-cf64-489f-9030-863f460c6c91';
 
 const db = getFirestore(FIRESTORE_DB_ID);
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });

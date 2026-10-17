@@ -342,7 +342,8 @@ export async function processVideoClip(videoFileBuffer?: Buffer) {
 }
 
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const runtimeDirname = path.dirname(__filename);
+const __dirname = path.basename(runtimeDirname) === 'dist' ? path.resolve(runtimeDirname, '..') : runtimeDirname;
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -353,7 +354,16 @@ app.use(
     contentSecurityPolicy: false,
   })
 );
-app.use(cors({ origin: true, credentials: true }));
+const allowedCorsOrigins = new Set(
+  (process.env.CORS_ALLOWED_ORIGINS || 'https://qlipzync.web.app,https://qlipzync.firebaseapp.com')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean)
+);
+app.use(cors({
+  origin: (origin, callback) => callback(null, !origin || allowedCorsOrigins.has(origin)),
+  credentials: true,
+}));
 
 app.use((req: Request, res: Response, next: NextFunction) => {
   if (req.originalUrl.includes('/webhooks/') || req.originalUrl.includes('/stripe/')) {
@@ -408,7 +418,7 @@ const sendConfig = (_req: Request, res: Response) => {
     endpoints: {
       apiBaseUrl: '/api',
       productionHostingUrl: 'https://qlipzync.web.app',
-      databaseId: 'qlipzync-prod',
+      databaseId: 'ai-studio-quickclick-003fd948-cf64-489f-9030-863f460c6c91',
     },
   });
 };
@@ -580,7 +590,7 @@ app.use('/api/api-keys', apiKeysRouter);
 app.post(['/api/v1/clips/trigger-sync', '/api/clips/trigger-sync'], requireAuth, requireActiveSubscription, async (req: Request, res: Response) => {
   const userId = req.user!.uid;
   try {
-    const db = getFirestore(process.env.FIRESTORE_DB || 'qlipzync-prod');
+    const db = getFirestore(process.env.FIRESTORE_DB || 'ai-studio-quickclick-003fd948-cf64-489f-9030-863f460c6c91');
     const userDoc = await db.collection('users').doc(userId).get();
     const userData = userDoc.data();
     const channelName = userData?.channelName || userData?.name || 'Twitch Streamer';
@@ -604,7 +614,7 @@ app.post(['/api/v1/clips/trigger-sync', '/api/clips/trigger-sync'], requireAuth,
 app.get('/api/integrations/status', requireAuth, async (req: Request, res: Response) => {
   try {
     const uid = req.user!.uid;
-    const db = getFirestore(process.env.FIRESTORE_DB || 'qlipzync-prod');
+    const db = getFirestore(process.env.FIRESTORE_DB || 'ai-studio-quickclick-003fd948-cf64-489f-9030-863f460c6c91');
     const integrationsSnapshot = await db
       .collection('users')
       .doc(uid)

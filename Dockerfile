@@ -13,7 +13,7 @@ WORKDIR /app
 
 # Install build dependencies
 COPY package.json package-lock.json* ./
-RUN npm install --legacy-peer-deps
+RUN npm ci --legacy-peer-deps
 
 # Copy source code
 COPY . ./
@@ -23,7 +23,7 @@ ENV NODE_OPTIONS="--max-old-space-size=2048"
 RUN npm run build
 
 # Validate compilation artifacts
-RUN test -f dist/server.cjs && test -f dist/index.html || (echo "Build error: missing artifacts in dist/" && exit 1)
+RUN test -f dist/server.js && test -f dist/index.html || (echo "Build error: missing artifacts in dist/" && exit 1)
 
 # ------------------------------------------------------------------------------
 # Stage 2: Production Minimal Runner Stage
@@ -43,7 +43,7 @@ RUN apt-get update && \
 
 # Install production dependencies only (0 devDependencies)
 COPY package.json package-lock.json* ./
-RUN npm install --omit=dev --legacy-peer-deps && \
+RUN npm ci --omit=dev --legacy-peer-deps && \
     npm cache clean --force
 
 # Copy pre-compiled production bundles from builder stage
@@ -56,4 +56,4 @@ USER node
 EXPOSE 3000
 
 # Launch optimized bundled production server
-CMD ["node", "dist/server.cjs"]
+CMD ["node", "dist/server.js"]
