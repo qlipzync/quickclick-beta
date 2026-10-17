@@ -52,6 +52,12 @@ jobs:
       - name: Unit and configuration regression tests
         run: npm test
 
+      - name: Setup Java 21 for Firebase Emulator
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
       - name: Firestore rules emulator tests
         run: npx --yes firebase-tools@latest emulators:exec --only firestore --project demo-quickclick-beta "npm run test:rules"
 
