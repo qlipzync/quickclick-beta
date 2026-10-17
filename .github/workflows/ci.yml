@@ -1,34 +1,88 @@
-name: CI & Build Test
+name: CI & Production Readiness
 
 on:
   push:
-    branches: [ "main", "fix-npm-dependencies" ]
+    branches:
+      - main
+      - fix-npm-dependencies
+      - fix/production-readiness-*
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  build:
+  verify:
+    name: Typecheck, Tests, Audit & Container Smoke Test
     runs-on: ubuntu-latest
-
-    strategy:
-      matrix:
-        node-version: [22.x]
-
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ matrix.node-version }}
-        cache: 'npm'
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
 
-    - name: Install dependencies
-      run: npm install --legacy-peer-deps
+      - name: Synchronize lockfile
+        run: |
+          npm install --package-lock-only --legacy-peer-deps
+          npm audit fix --package-lock-only --legacy-peer-deps
+          if [ "${GITHUB_EVENT_NAME}" = "push" ] && [ "${GITHUB_REF_TYPE}" = "branch" ] && [[ "${GITHUB_REF_NAME}" == fix/production-readiness-* ]] && ! git diff --quiet -- package-lock.json; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add package-lock.json
+            git commit -m "build: synchronize npm lockfile"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
 
-    - name: Run Typecheck & Lint
-      run: npm run lint
+      - name: Install from lockfile
+        run: npm ci --legacy-peer-deps
 
-    - name: Build Application
-      run: npm run build
+      - name: Typecheck
+        run: npm run lint
+
+      - name: Unit and configuration regression tests
+        run: npm test
+
+      - name: Firestore rules emulator tests
+        run: npx --yes firebase-tools@latest emulators:exec --only firestore --project demo-quickclick-beta "npm run test:rules"
+
+      - name: High and critical dependency audit
+        run: npm audit --audit-level=high
+
+      - name: Build frontend and production server
+        run: npm run build
+
+      - name: Build production Docker image
+        run: docker build --tag quickclick-beta-ci .
+
+      - name: Smoke test production container
+        shell: bash
+        run: |
+          set -euo pipefail
+          cleanup() { docker rm -f quickclick-beta-smoke >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          docker run -d --name quickclick-beta-smoke \
+            -p 127.0.0.1:8080:3000 \
+            -e NODE_ENV=production \
+            -e PORT=3000 \
+            -e GCP_PROJECT=qlipzync \
+            -e GCP_REGION=europe-west3 \
+            -e FIRESTORE_DB=ai-studio-quickclick-003fd948-cf64-489f-9030-863f460c6c91 \
+            quickclick-beta-ci
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8080/health; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs quickclick-beta-smoke
+          exit 1
