@@ -69,3 +69,25 @@ test('client sync uses verified Firebase UID and never submits server-controlled
   assert.match(source, /doc\(db\.prod, 'users', firebaseUid\)/);
   assert.ok(!source.includes("doc(db.prod, 'users', user.id)"));
 });
+
+test('server routes and middleware do not retain the legacy Firestore database fallback', () => {
+  const sourcePaths = [
+    'server.ts',
+    'server/index.ts',
+    'server/middleware/authMiddleware.ts',
+    'server/middleware/unifiedAuth.middleware.ts',
+    'server/routes/apiKey.routes.ts',
+    'server/routes/apiKeys.routes.ts',
+    'server/routes/authOAuth.ts',
+    'server/routes/clips.ts',
+    'server/routes/extraClips.ts',
+    'server/routes/platform.routes.ts',
+    'server/routes/stripe.ts',
+    'server/routes/subscription.routes.ts',
+    'server/routes/topupRoute.ts',
+    'server/routes/twitch.ts',
+  ];
+  for (const path of sourcePaths) {
+    assert.ok(!readFileSync(path, 'utf8').includes('qlipzync-prod'), path + ' still contains the legacy Firestore database ID');
+  }
+});
