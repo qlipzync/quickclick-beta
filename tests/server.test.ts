@@ -54,3 +54,25 @@ test('billing top-up rejects unauthenticated requests', async () => {
   });
   assert.equal(response.status, 401);
 });
+
+test('dynamic Stripe webhook rejects unsigned HTTP requests before processing', async () => {
+  const response = await fetch(baseUrl + '/api/stripe/webhook', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ type: 'checkout.session.completed', data: { object: {} } }),
+  });
+  assert.equal(response.status, 503);
+  const payload = await response.json() as { error?: string };
+  assert.match(payload.error || '', /Webhook|konfiguriert/i);
+});
+
+test('legacy subscription Stripe webhook rejects unsigned HTTP requests before processing', async () => {
+  const response = await fetch(baseUrl + '/api/v1/subscription/webhook', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ type: 'checkout.session.completed', data: { object: {} } }),
+  });
+  assert.equal(response.status, 503);
+  const payload = await response.json() as { error?: string };
+  assert.equal(payload.error, 'STRIPE_WEBHOOK_NOT_CONFIGURED');
+});
