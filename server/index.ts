@@ -13,6 +13,12 @@ export function verifyTotpRFC6238(): boolean {
   return false;
 }
 
+export function sanitizeForSpreadsheet(value: unknown): string {
+  const text = value == null ? '' : String(value);
+  // Neutralize spreadsheet formulas when untrusted input is exported to Sheets/CSV.
+  return /^[\s\u0000-\u001f]*[=+@-]/.test(text) ? `'${text}` : text;
+}
+
 export function installRawBodyParser(app: express.Express): void {
   app.use(
     express.json({
