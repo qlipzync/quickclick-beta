@@ -85,7 +85,7 @@ authOAuthRouter.get(['/:provider/connect', '/connect/:provider'], async (req, re
     createdAt: Date.now(),
   });
 
-  const appBaseUrl = process.env.APP_BASE_URL || `\({req.protocol}://\){req.get('host')}`;
+  const appBaseUrl = process.env.APP_BASE_URL || `${req.protocol}://${req.get('host')}`;
   let authUrl = '';
 
   switch (provider) {
@@ -95,7 +95,7 @@ authOAuthRouter.get(['/:provider/connect', '/connect/:provider'], async (req, re
       const scopes = ['user:read:email', 'channel:read:subscriptions', 'bits:read'].join(' ');
       authUrl = `https://id.twitch.tv/oauth2/authorize?client_id=${encodeURIComponent(
         clientId
-      )}&redirect_uri=\({encodeURIComponent(redirectUri)}&response_type=code&scope=\){encodeURIComponent(
+      )}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(
         scopes
       )}&state=${state}&force_verify=true`;
       break;
@@ -111,7 +111,7 @@ authOAuthRouter.get(['/:provider/connect', '/connect/:provider'], async (req, re
       ].join(' ');
       authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(
         clientId
-      )}&redirect_uri=\({encodeURIComponent(redirectUri)}&response_type=code&scope=\){encodeURIComponent(
+      )}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(
         scopes
       )}&access_type=offline&prompt=consent&state=${state}`;
       break;
@@ -127,7 +127,7 @@ authOAuthRouter.get(['/:provider/connect', '/connect/:provider'], async (req, re
       ].join(' ');
       authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(
         clientId
-      )}&redirect_uri=\({encodeURIComponent(redirectUri)}&response_type=code&scope=\){encodeURIComponent(
+      )}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(
         scopes
       )}&access_type=offline&prompt=consent&state=${state}`;
       break;
@@ -173,7 +173,7 @@ authOAuthRouter.all(['/:provider/callback', '/callback/:provider'], async (req, 
   const stateRecord = state ? oauthStateStore.get(state) : undefined;
   const userId = stateRecord?.userId || (req.headers['x-user-id'] as string) || 'default_user';
   const userName = stateRecord?.userName || 'Streamer';
-  const appBaseUrl = process.env.APP_BASE_URL || `\({req.protocol}://\){req.get('host')}`;
+  const appBaseUrl = process.env.APP_BASE_URL || `${req.protocol}://${req.get('host')}`;
   if (state) oauthStateStore.delete(state);
 
   try {
