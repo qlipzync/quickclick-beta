@@ -72,9 +72,9 @@ async function dispatchLiveStreamInvitations(
 
     const message = isReminder
       ? (userData.systemConfiguration?.customReminderText ||
-          `⏰ **LIVE-REMINDER (Vor 15 Min. gestartet)**: **${broadcasterName}** ist immer noch LIVE auf Twitch!\n🎮 **Spiel / Kategorie**: ${game}\n👥 **Aktuelle Zuschauer**: ${viewers}\n📺[...])`
+          `⏰ **LIVE-REMINDER (vor 15 Minuten gestartet)**: **${broadcasterName}** ist weiterhin live auf Twitch!\n🎮 **Spiel / Kategorie**: ${game}\n👥 **Aktuelle Zuschauer**: ${viewers}\n📺 **Titel**: ${title}\n🔗 Jetzt live dabei sein: ${streamUrl}`)
       : (userData.systemConfiguration?.customLiveInviteText ||
-          `🔴 **LIVE-STREAM START**: **${broadcasterName}** ist JETZT LIVE auf Twitch!\n🎮 **Spiel / Kategorie**: ${game}\n📺 **Titel**: ${title}\n🔗 Jetzt live dabei sein: ${streamUrl}`);
+          `🔴 **LIVE-STREAM START**: **${broadcasterName}** ist jetzt live auf Twitch!\n🎮 **Spiel / Kategorie**: ${game}\n📺 **Titel**: ${title}\n👥 **Aktuelle Zuschauer**: ${viewers}\n🔗 Jetzt live dabei sein: ${streamUrl}`);
 
     // A. Discord Webhook Push
     const discordUrl =
