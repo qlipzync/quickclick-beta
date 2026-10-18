@@ -143,7 +143,7 @@ authOAuthRouter.get(['/:provider/connect', '/connect/:provider'], async (req, re
       const scopes = ['public_profile', 'instagram_basic', 'instagram_content_publish'].join(',');
       authUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${encodeURIComponent(
         appId
-      )}&redirect_uri=\({encodeURIComponent(redirectUri)}&scope=\){encodeURIComponent(scopes)}&state=${state}`;
+      )}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}&state=${state}`;
       break;
     }
     default:
