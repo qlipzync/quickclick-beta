@@ -5,6 +5,14 @@ import express from 'express';
  * Installs JSON parsing with exact raw-body capture for Stripe and Twitch webhooks.
  * Use this helper from the main server entry point before registering route handlers.
  */
+export function createRateLimiter() {
+  return (_req: Request, _res: Response, next: (error?: unknown) => void) => next();
+}
+
+export function verifyTotpRFC6238(): boolean {
+  return false;
+}
+
 export function installRawBodyParser(app: express.Express): void {
   app.use(
     express.json({
