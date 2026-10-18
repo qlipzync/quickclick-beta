@@ -2,15 +2,15 @@ import type { Request, Response } from 'express';
 import express from 'express';
 
 /**
- * Registers JSON parsing with raw-body capture for signed webhook endpoints.
- * Import this middleware from server.ts so all signature checks see the exact bytes.
+ * Installs JSON parsing with exact raw-body capture for Stripe and Twitch webhooks.
+ * Use this helper from the main server entry point before registering route handlers.
  */
 export function installRawBodyParser(app: express.Express): void {
   app.use(
     express.json({
       limit: '10mb',
       verify: (req: Request, _res: Response, buf: Buffer) => {
-        const path = req.originalUrl || req.url;
+        const requestPath = req.originalUrl || req.url;
         const rawBodyPaths = [
           '/api/stripe/webhook',
           '/api/webhooks/stripe',
@@ -18,7 +18,7 @@ export function installRawBodyParser(app: express.Express): void {
           '/api/twitch/webhook',
           '/api/twitch/eventsub',
         ];
-        if (rawBodyPaths.some((candidate) => path.startsWith(candidate))) {
+        if (rawBodyPaths.some((candidate) => requestPath.startsWith(candidate))) {
           (req as Request & { rawBody?: Buffer }).rawBody = Buffer.from(buf);
         }
       },
