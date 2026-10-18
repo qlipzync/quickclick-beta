@@ -369,26 +369,18 @@ authOAuthRouter.get('/events', (req, res) => {
 authOAuthRouter.post('/2fa/generate', createRateLimiter(10, 900000), (req, res) => {
   const { channelName } = req.body;
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  const random = crypto.randomBytes(20);
   let secret = '';
-  for (let i = 0; i < 20; i++) {
-    secret += chars[Math.floor(Math.random() * chars.length)];
+  for (let i = 0; i < random.length; i += 1) {
+    secret += chars[random[i] % chars.length];
   }
 
-  const otpAuthUrl = `otpauth://totp/QuickClick:${encodeURIComponent(channelName || 'streamer')}?secret=${secret}&issuer=QuickClick&algorithm=SHA1&digits=6&period=30`;
+  const label = encodeURIComponent(channelName || 'streamer');
+  const otpAuthUrl = `otpauth://totp/QuickClick:${label}?secret=${secret}&issuer=QuickClick&algorithm=SHA1&digits=6&period=30`;
 
   res.json({
     secretKey: secret,
     otpAuthUrl,
-    backupCodes: [
-      'A8X9-4K2P',
-      'B3N7-9W1L',
-      'C5M2-8R4Q',
-      'D9V4-2Z6T',
-      'E1K8-7H3F',
-      'F4P9-5J2M',
-      'G7R3-1X8B',
-      'H2W6-4N9D',
-    ],
   });
 });
 
