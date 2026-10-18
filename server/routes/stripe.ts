@@ -150,6 +150,7 @@ stripeRouter.post(['/webhook', '/'], async (req: any, res) => {
   const stripe = getStripe();
   let event: any;
 
+  // Require signature verification in production. Allow fallback only in non-production for local testing.
   if (stripe && webhookSecret && sig && req.rawBody) {
     try {
       event = stripe.webhooks.constructEvent(req.rawBody, sig, webhookSecret);
@@ -158,6 +159,11 @@ stripeRouter.post(['/webhook', '/'], async (req: any, res) => {
       return res.status(400).send(`Webhook Error: ${err.message}`);
     }
   } else {
+    if (process.env.NODE_ENV === 'production') {
+      console.error('[Stripe Webhook] Missing webhook secret or rawBody in production; rejecting request.');
+      return res.status(403).json({ error: 'Stripe webhook signature verification not possible (missing secret/rawBody)' });
+    }
+    // In non-production, accept the parsed body for developer convenience
     event = req.body;
   }
 
