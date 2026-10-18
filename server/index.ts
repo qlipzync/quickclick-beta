@@ -6,8 +6,12 @@ import express from 'express';
  * Use this helper from the main server entry point before registering route handlers.
  */
 export function createRateLimiter(
-  options: { windowMs?: number; max?: number; message?: string } = {}
+  maxOrOptions: number | { windowMs?: number; max?: number; message?: string } = 60,
+  positionalWindowMs = 60_000
 ) {
+  const options = typeof maxOrOptions === 'number'
+    ? { max: maxOrOptions, windowMs: positionalWindowMs }
+    : maxOrOptions;
   const windowMs = Math.max(1_000, options.windowMs ?? 60_000);
   const max = Math.max(1, options.max ?? 60);
   const buckets = new Map<string, { count: number; resetAt: number }>();
