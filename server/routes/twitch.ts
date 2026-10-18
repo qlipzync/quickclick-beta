@@ -72,7 +72,7 @@ async function dispatchLiveStreamInvitations(
 
     const message = isReminder
       ? (userData.systemConfiguration?.customReminderText ||
-          `⏰ **LIVE-REMINDER (Vor 15 Min. gestartet)**: **${broadcasterName}** ist immer noch LIVE auf Twitch!\n🎮 **Spiel / Kategorie**: ${game}\n👥 **Aktuelle Zuschauer**: ${viewers}\n📺 **Titel**: ${title}\n🔗 Jetzt einschalten & Streamer unterstützen: ${streamUrl}`)
+          `⏰ **LIVE-REMINDER (Vor 15 Min. gestartet)**: **${broadcasterName}** ist immer noch LIVE auf Twitch!\n🎮 **Spiel / Kategorie**: ${game}\n👥 **Aktuelle Zuschauer**: ${viewers}\n📺[...])`
       : (userData.systemConfiguration?.customLiveInviteText ||
           `🔴 **LIVE-STREAM START**: **${broadcasterName}** ist JETZT LIVE auf Twitch!\n🎮 **Spiel / Kategorie**: ${game}\n📺 **Titel**: ${title}\n🔗 Jetzt live dabei sein: ${streamUrl}`);
 
@@ -605,7 +605,12 @@ export function handleTwitchWebhook(req: any, res: any) {
   const messageSignature = req.headers['twitch-eventsub-message-signature'] as string;
   const messageType = req.headers['twitch-eventsub-message-type'] as string;
 
-  const webhookSecret = process.env.TWITCH_WEBHOOK_SECRET || 'quickclick_eventsub_secret_2026';
+  // Do NOT have a fallback default secret in code. Require an env var in production.
+  const webhookSecret = process.env.TWITCH_WEBHOOK_SECRET;
+  if (!webhookSecret) {
+    console.error('[Twitch Webhook] TWITCH_WEBHOOK_SECRET not configured. Rejecting webhook.');
+    return res.status(500).json({ error: 'TWITCH_WEBHOOK_SECRET not configured' });
+  }
 
   // 1. Handle Twitch EventSub Subscription Verification Challenge (RFC handshake)
   if (messageType === 'webhook_callback_verification') {
@@ -645,14 +650,16 @@ export function handleTwitchWebhook(req: any, res: any) {
 
       if (expectedBuf.length === sigBuf.length && crypto.timingSafeEqual(expectedBuf, sigBuf)) {
         // Signature successfully verified
-      } else if (process.env.NODE_ENV === 'production') {
+      } else {
         return res.status(403).json({ error: 'Ungültige Twitch EventSub HMAC Signatur' });
       }
-    } catch {
-      if (process.env.NODE_ENV === 'production') {
-        return res.status(403).json({ error: 'Signaturprüfung fehlgeschlagen' });
-      }
+    } catch (err) {
+      console.error('[Twitch Webhook] Signaturprüfung fehlgeschlagen', err);
+      return res.status(403).json({ error: 'Signaturprüfung fehlgeschlagen' });
     }
+  } else {
+    // If the webhook is expected to be signed but signature headers are missing, reject.
+    return res.status(400).json({ error: 'Missing Twitch EventSub signature headers' });
   }
 
   // 4. Process Status-Events (Stream Online/Offline, Subscriptions, Clips, Bits)
@@ -839,10 +846,10 @@ twitchRouter.post('/test-notification', async (req, res) => {
   const testContent =
     customMessage ||
     (type === 'reminder_15m'
-      ? `⏰ **[TEST-SIGNAL] 15-Minuten Reminder**: **${channelName}** ist seit 15 Min. live auf Twitch!\n🎮 **Kategorie**: Gaming / Just Chatting\n👀 **Zuschauer**: 42\n📺 **Titel**: Live-Pipeline Test via QuickClick\n🔗 Jetzt einschalten: ${streamUrl}`
+      ? `⏰ **[TEST-SIGNAL] 15-Minuten Reminder**: **${channelName}** ist seit 15 Min. live auf Twitch!\n🎮 **Kategorie**: Gaming / Just Chatting\n👀 **Zuschauer**: 42\n📺 **Titel**: Live-[...])`
       : type === 'pulse_10m'
-      ? `📊 **[TEST-SIGNAL] 10-Minuten Stream-Update (0 Std. 30 Min.)** • **${channelName}**\n🎮 **Kategorie**: Valorant / Ranked\n👀 **Zuschauer**: 128\n⚡ **QlipZync Engine**: Zero-Storage RAM aktiv (0 MB)\n🔗 Jetzt zuschauen: ${streamUrl}`
-      : `🔴 **[TEST-SIGNAL] LIVE-STREAM START**: **${channelName}** ist JETZT LIVE auf Twitch!\n🎮 **Kategorie**: Gaming\n📺 **Titel**: Live-Pipeline Connectivity Test\n🔗 Jetzt live dabei sein: ${streamUrl}`);
+      ? `📊 **[TEST-SIGNAL] 10-Minuten Stream-Update (0 Std. 30 Min.)** • **${channelName}**\n🎮 **Kategorie**: Valorant / Ranked\n👀 **Zuschauer**: 128\n⚡ **QlipZync Engine**: Zero-Sto[...]`
+      : `🔴 **[TEST-SIGNAL] LIVE-STREAM START**: **${channelName}** ist JETZT LIVE auf Twitch!\n🎮 **Kategorie**: Gaming\n📺 **Titel**: Live-Pipeline Connectivity Test\n🔗 Jetzt live dabe[...]`);
 
   // 1. DISCORD TEST
   if (target === 'discord' || target === 'all') {
