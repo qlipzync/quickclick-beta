@@ -366,7 +366,7 @@ authOAuthRouter.get('/events', (req, res) => {
 // ---------------------------------------------------------------------------
 // 4. POST /api/auth/2fa/generate & POST /api/auth/2fa/verify (Canonical 2FA)
 // ---------------------------------------------------------------------------
-authOAuthRouter.post('/2fa/generate', (req, res) => {
+authOAuthRouter.post('/2fa/generate', createRateLimiter(10, 900000), (req, res) => {
   const { channelName } = req.body;
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
   let secret = '';
