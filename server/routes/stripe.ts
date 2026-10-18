@@ -6,6 +6,46 @@ import { requireAuth } from '../middleware/authMiddleware.js';
 
 export const stripeRouter = Router();
 
+/**
+ * Per-instance rate limiting for authenticated Stripe management endpoints.
+ * Uses Express's resolved client IP and bounds the in-memory store to avoid
+ * attacker-driven memory growth. This is defense-in-depth; use a shared store
+ * if strict limits across multiple Cloud Run instances are required.
+ */
+const stripeRateLimitBuckets = new Map<string, { count: number; resetAt: number }>();
+
+function stripeRouteRateLimit(maxRequests: number, windowMs: number) {
+  return (req: import('express').Request, res: import('express').Response, next: import('express').NextFunction) => {
+    const now = Date.now();
+    const ip = req.ip || req.socket.remoteAddress || 'unknown';
+    const key = `${req.method}:${req.baseUrl}${req.path}:${ip}`;
+    let bucket = stripeRateLimitBuckets.get(key);
+
+    if (!bucket || bucket.resetAt <= now) {
+      bucket = { count: 0, resetAt: now + windowMs };
+      stripeRateLimitBuckets.set(key, bucket);
+    }
+
+    bucket.count += 1;
+    res.setHeader('RateLimit-Limit', String(maxRequests));
+    res.setHeader('RateLimit-Remaining', String(Math.max(0, maxRequests - bucket.count)));
+
+    if (bucket.count > maxRequests) {
+      const retryAfter = Math.max(1, Math.ceil((bucket.resetAt - now) / 1000));
+      res.setHeader('Retry-After', String(retryAfter));
+      res.setHeader('RateLimit-Reset', String(Math.ceil(bucket.resetAt / 1000)));
+      return res.status(429).json({ error: 'Zu viele Anfragen. Bitte später erneut versuchen.', retryAfter });
+    }
+
+    if (stripeRateLimitBuckets.size > 5000) {
+      for (const [bucketKey, value] of stripeRateLimitBuckets) {
+        if (value.resetAt <= now) stripeRateLimitBuckets.delete(bucketKey);
+      }
+    }
+    return next();
+  };
+}
+
 const FIRESTORE_DB_ID = process.env.FIRESTORE_DB || 'ai-studio-quickclick-003fd948-cf64-489f-9030-863f460c6c91';
 const db = getFirestore(FIRESTORE_DB_ID);
 const stripeEvents = db.collection('_stripeWebhookEvents');
@@ -95,7 +135,7 @@ stripeRouter.get('/products', (_req, res) => {
   });
 });
 
-stripeRouter.post(['/checkout', '/create-checkout-session'], requireAuth, async (req, res) => {
+stripeRouter.post(['/checkout', '/create-checkout-session'], stripeRouteRateLimit(10, 60_000), requireAuth, async (req, res) => {
   try {
     const userId = req.user?.uid;
     if (!userId) return res.status(401).json({ error: 'Authentifizierung erforderlich.' });
@@ -295,7 +335,7 @@ stripeRouter.post(['/webhook', '/'], async (req, res) => {
   }
 });
 
-stripeRouter.get(['/webhook/events', '/events'], requireAuth, async (req, res) => {
+stripeRouter.get(['/webhook/events', '/events'], stripeRouteRateLimit(30, 60_000), requireAuth, async (req, res) => {
   if (!req.user?.isAdmin) {
     return res.status(403).json({ error: 'Adminrechte erforderlich.' });
   }
