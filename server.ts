@@ -365,20 +365,25 @@ app.use(cors({
   credentials: true,
 }));
 
-app.use((req: Request, res: Response, next: NextFunction) => {
-  if (req.originalUrl.includes('/webhooks/') || req.originalUrl.includes('/stripe/')) {
-    let data = Buffer.from('');
-    req.on('data', (chunk) => {
-      data = Buffer.concat([data, chunk]);
-    });
-    req.on('end', () => {
-      (req as any).rawBody = data;
-      next();
-    });
-  } else {
-    express.json({ limit: '10mb' })(req, res, next);
-  }
-});
+// Parse JSON once, while preserving the exact bytes required by Stripe/Twitch signatures.
+app.use(
+  express.json({
+    limit: '10mb',
+    verify: (req: Request, _res: Response, buf: Buffer) => {
+      const requestPath = req.originalUrl || req.url;
+      const rawBodyPaths = [
+        '/api/stripe/webhook',
+        '/api/webhooks/stripe',
+        '/api/webhooks/twitch',
+        '/api/twitch/webhook',
+        '/api/twitch/eventsub',
+      ];
+      if (rawBodyPaths.some((candidate) => requestPath.startsWith(candidate))) {
+        (req as Request & { rawBody?: Buffer }).rawBody = Buffer.from(buf);
+      }
+    },
+  })
+);
 
 const sendHealth = (_req: Request, res: Response) => {
   res.status(200).json({
