@@ -91,3 +91,22 @@ test('server routes and middleware do not retain the legacy Firestore database f
     assert.ok(!readFileSync(path, 'utf8').includes('qlipzync-prod'), path + ' still contains the legacy Firestore database ID');
   }
 });
+
+test('both Stripe webhook paths require raw signed payloads and durable replay guards', () => {
+  const server = readFileSync('server.ts', 'utf8');
+  const dynamicStripe = readFileSync('server/routes/stripe.ts', 'utf8');
+  const subscription = readFileSync('server/routes/subscription.routes.ts', 'utf8');
+
+  assert.match(server, /'\/api\/(?:v1\/)?subscription\/webhook'/);
+  assert.match(dynamicStripe, /constructEvent\(\(req as any\)\.rawBody, signature, webhookSecret\)/);
+  assert.doesNotMatch(dynamicStripe, /event\s*=\s*req\.body/);
+  assert.match(dynamicStripe, /_stripeWebhookEvents/);
+  assert.match(dynamicStripe, /runTransaction\(async \(transaction\)/);
+
+  assert.match(subscription, /constructEvent\(rawBody, signature, webhookSecret\)/);
+  assert.doesNotMatch(subscription, /rawBody\s*\|\|\s*req\.body/);
+  assert.match(subscription, /_stripeSubscriptionWebhookEvents/);
+  assert.match(subscription, /status === 'processed'/);
+  assert.match(subscription, /STRIPE_EVENT_PROCESSING/);
+  assert.match(subscription, /session\.payment_status/);
+});

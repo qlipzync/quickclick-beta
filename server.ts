@@ -374,6 +374,8 @@ app.use(
       const rawBodyPaths = [
         '/api/stripe/webhook',
         '/api/webhooks/stripe',
+        '/api/v1/subscription/webhook',
+        '/api/subscription/webhook',
         '/api/webhooks/twitch',
         '/api/twitch/webhook',
         '/api/twitch/eventsub',
