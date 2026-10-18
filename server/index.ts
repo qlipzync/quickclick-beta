@@ -44,10 +44,10 @@ export function createRateLimiter(
 }
 
 export function verifyTotpRFC6238(code: string, secret: string, window = 1): boolean {
-  if (!/^\\d{6}$/.test(code) || !secret) return false;
+  if (!/^\d{6}$/.test(code) || !secret) return false;
 
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-  const normalized = secret.replace(/=+$/g, '').replace(/\\s+/g, '').toUpperCase();
+  const normalized = secret.replace(/=+$/g, '').replace(/\s+/g, '').toUpperCase();
   let bits = '';
   for (const char of normalized) {
     const value = alphabet.indexOf(char);
