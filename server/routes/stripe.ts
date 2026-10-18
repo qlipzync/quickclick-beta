@@ -17,8 +17,13 @@ const stripeRateLimitBuckets = new Map<string, { count: number; resetAt: number 
 function stripeRouteRateLimit(maxRequests: number, windowMs: number) {
   return (req: import('express').Request, res: import('express').Response, next: import('express').NextFunction) => {
     const now = Date.now();
+    // Use the IP resolved by Express/proxy trust configuration; do not trust
+    // arbitrary X-Forwarded-For input directly.
     const ip = req.ip || req.socket.remoteAddress || 'unknown';
-    const key = `${req.method}:${req.baseUrl}${req.path}:${ip}`;
+    // req.path may be identical for aliases; including the registered base URL
+    // keeps counters route-scoped after Express mounts the router.
+    const routePath = req.baseUrl || req.path;
+    const key = `${req.method}:${routePath}:${ip}`;
     let bucket = stripeRateLimitBuckets.get(key);
 
     if (!bucket || bucket.resetAt <= now) {
