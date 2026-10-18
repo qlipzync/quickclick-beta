@@ -85,7 +85,7 @@ authOAuthRouter.get(['/:provider/connect', '/connect/:provider'], async (req, re
     createdAt: Date.now(),
   });
 
-  const appBaseUrl = process.env.APP_BASE_URL || `\({req.protocol}://\){req.get('host')}`;
+  const appBaseUrl = process.env.APP_BASE_URL || `${req.protocol}://${req.get('host')}`;
   let authUrl = '';
 
   switch (provider) {
@@ -95,7 +95,7 @@ authOAuthRouter.get(['/:provider/connect', '/connect/:provider'], async (req, re
       const scopes = ['user:read:email', 'channel:read:subscriptions', 'bits:read'].join(' ');
       authUrl = `https://id.twitch.tv/oauth2/authorize?client_id=${encodeURIComponent(
         clientId
-      )}&redirect_uri=\({encodeURIComponent(redirectUri)}&response_type=code&scope=\){encodeURIComponent(
+      )}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(
         scopes
       )}&state=${state}&force_verify=true`;
       break;
@@ -111,7 +111,7 @@ authOAuthRouter.get(['/:provider/connect', '/connect/:provider'], async (req, re
       ].join(' ');
       authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(
         clientId
-      )}&redirect_uri=\({encodeURIComponent(redirectUri)}&response_type=code&scope=\){encodeURIComponent(
+      )}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(
         scopes
       )}&access_type=offline&prompt=consent&state=${state}`;
       break;
@@ -127,7 +127,7 @@ authOAuthRouter.get(['/:provider/connect', '/connect/:provider'], async (req, re
       ].join(' ');
       authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(
         clientId
-      )}&redirect_uri=\({encodeURIComponent(redirectUri)}&response_type=code&scope=\){encodeURIComponent(
+      )}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(
         scopes
       )}&access_type=offline&prompt=consent&state=${state}`;
       break;
@@ -143,7 +143,7 @@ authOAuthRouter.get(['/:provider/connect', '/connect/:provider'], async (req, re
       const scopes = ['public_profile', 'instagram_basic', 'instagram_content_publish'].join(',');
       authUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${encodeURIComponent(
         appId
-      )}&redirect_uri=\({encodeURIComponent(redirectUri)}&scope=\){encodeURIComponent(scopes)}&state=${state}`;
+      )}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}&state=${state}`;
       break;
     }
     default:
@@ -173,7 +173,7 @@ authOAuthRouter.all(['/:provider/callback', '/callback/:provider'], async (req, 
   const stateRecord = state ? oauthStateStore.get(state) : undefined;
   const userId = stateRecord?.userId || (req.headers['x-user-id'] as string) || 'default_user';
   const userName = stateRecord?.userName || 'Streamer';
-  const appBaseUrl = process.env.APP_BASE_URL || `\({req.protocol}://\){req.get('host')}`;
+  const appBaseUrl = process.env.APP_BASE_URL || `${req.protocol}://${req.get('host')}`;
   if (state) oauthStateStore.delete(state);
 
   try {
@@ -237,7 +237,7 @@ authOAuthRouter.all(['/:provider/callback', '/callback/:provider'], async (req, 
     } else if (provider === 'google' || provider === 'youtube') {
       const clientId = process.env.GOOGLE_CLIENT_ID || '248792984033-91mcnb6d2qhl397nnou2fk6jp1d1dphn.apps.googleusercontent.com';
       const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-      const redirectUri = process.env.GOOGLE_REDIRECT_URI || `\({appBaseUrl}/api/auth/\){provider}/callback`;
+      const redirectUri = process.env.GOOGLE_REDIRECT_URI || `${appBaseUrl}/api/auth/${provider}/callback`;
       if (clientId && clientSecret) {
         const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
           method: 'POST',
@@ -366,29 +366,21 @@ authOAuthRouter.get('/events', (req, res) => {
 // ---------------------------------------------------------------------------
 // 4. POST /api/auth/2fa/generate & POST /api/auth/2fa/verify (Canonical 2FA)
 // ---------------------------------------------------------------------------
-authOAuthRouter.post('/2fa/generate', (req, res) => {
+authOAuthRouter.post('/2fa/generate', createRateLimiter(10, 900000), (req, res) => {
   const { channelName } = req.body;
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  const random = crypto.randomBytes(20);
   let secret = '';
-  for (let i = 0; i < 20; i++) {
-    secret += chars[Math.floor(Math.random() * chars.length)];
+  for (let i = 0; i < random.length; i += 1) {
+    secret += chars[random[i] % chars.length];
   }
 
-  const otpAuthUrl = `otpauth://totp/QuickClick:${encodeURIComponent(channelName || 'streamer')}?secret=${secret}&issuer=QuickClick&algorithm=SHA1&digits=6&period=30`;
+  const label = encodeURIComponent(channelName || 'streamer');
+  const otpAuthUrl = `otpauth://totp/QuickClick:${label}?secret=${secret}&issuer=QuickClick&algorithm=SHA1&digits=6&period=30`;
 
   res.json({
     secretKey: secret,
     otpAuthUrl,
-    backupCodes: [
-      'A8X9-4K2P',
-      'B3N7-9W1L',
-      'C5M2-8R4Q',
-      'D9V4-2Z6T',
-      'E1K8-7H3F',
-      'F4P9-5J2M',
-      'G7R3-1X8B',
-      'H2W6-4N9D',
-    ],
   });
 });
 
@@ -396,11 +388,9 @@ authOAuthRouter.post('/2fa/verify', createRateLimiter(15, 900000), (req, res) =>
   const { code, secret, backupCodes } = req.body;
   const clean = (code || '').trim();
 
-  const isBackup = backupCodes && Array.isArray(backupCodes) && backupCodes.includes(clean);
+  const isBackup = false; // Backup codes must be verified against server-stored, single-use hashes.
   const isTotpValid = secret ? verifyTotpRFC6238(clean, secret) : false;
-  const isSandboxDemo = process.env.NODE_ENV !== 'production' && clean === '123456';
-
-  const isValid = isTotpValid || isBackup || isSandboxDemo;
+  const isValid = isTotpValid || isBackup;
 
   if (!isValid) {
     return res.status(401).json({

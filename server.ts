@@ -365,7 +365,7 @@ app.use(cors({
   credentials: true,
 }));
 
-// Parse JSON exactly once and capture the raw bytes required for signed webhooks.
+// Parse JSON once, while preserving the exact bytes required by Stripe/Twitch signatures.
 app.use(
   express.json({
     limit: '10mb',
@@ -377,7 +377,6 @@ app.use(
         '/api/v1/subscription/webhook',
         '/api/subscription/webhook',
         '/api/webhooks/twitch',
-        '/api/webhooks/twitch/eventsub',
         '/api/twitch/webhook',
         '/api/twitch/eventsub',
       ];
