@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import express from 'express';
+import crypto from 'node:crypto';
 
 /**
  * Installs JSON parsing with exact raw-body capture for Stripe and Twitch webhooks.
@@ -42,7 +43,40 @@ export function createRateLimiter(
   };
 }
 
-export function verifyTotpRFC6238(): boolean {
+export function verifyTotpRFC6238(code: string, secret: string, window = 1): boolean {
+  if (!/^\\d{6}$/.test(code) || !secret) return false;
+
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  const normalized = secret.replace(/=+$/g, '').replace(/\\s+/g, '').toUpperCase();
+  let bits = '';
+  for (const char of normalized) {
+    const value = alphabet.indexOf(char);
+    if (value < 0) return false;
+    bits += value.toString(2).padStart(5, '0');
+  }
+  const bytes: number[] = [];
+  for (let i = 0; i + 8 <= bits.length; i += 8) bytes.push(parseInt(bits.slice(i, i + 8), 2));
+  const key = Buffer.from(bytes);
+  if (key.length === 0) return false;
+
+  const counter = Math.floor(Date.now() / 1000 / 30);
+  const safeWindow = Math.max(0, Math.min(10, Math.trunc(window)));
+  const supplied = Buffer.from(code);
+  for (let delta = -safeWindow; delta <= safeWindow; delta += 1) {
+    const value = counter + delta;
+    if (value < 0) continue;
+    const message = Buffer.alloc(8);
+    message.writeBigUInt64BE(BigInt(value));
+    const digest = crypto.createHmac('sha1', key).update(message).digest();
+    const offset = digest[digest.length - 1] & 0x0f;
+    const binary =
+      ((digest[offset] & 0x7f) << 24) |
+      ((digest[offset + 1] & 0xff) << 16) |
+      ((digest[offset + 2] & 0xff) << 8) |
+      (digest[offset + 3] & 0xff);
+    const expected = Buffer.from(String(binary % 1_000_000).padStart(6, '0'));
+    if (supplied.length === expected.length && crypto.timingSafeEqual(supplied, expected)) return true;
+  }
   return false;
 }
 
