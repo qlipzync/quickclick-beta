@@ -50,8 +50,8 @@ export const app = getApps().length === 0 ? initializeApp(effectiveConfig) : get
 // - ai-studio-quickclick-003fd948-cf64-489f-9030-863f460c6c91: Konsolidierte SaaS-Produktionsumgebung (Nutzer, Rechnungen, Clips & KI-Metadaten)
 // - (default): Entwicklung, Staging & Sandbox mit No-Cost Free Tier
 export const databases = {
-  // Kern-Produktion für alle SaaS-Live-Nutzer, Rechnungen & KI-Metadaten (europe-west1)
-  prod: getFirestore(app, FIRESTORE_DATABASE_TOPOLOGY.prod.id),
+  // Kern-Produktion für alle SaaS-Live-Nutzer, Rechnungen & KI-Metadaten (europe-west3)
+  prod: getFirestore(app, firebaseConfig.firestoreDatabaseId || FIRESTORE_DATABASE_TOPOLOGY.prod.id),
 
   // Entwicklung, Staging & Testdaten (Greift auf die Standarddatenbank zu mit No-Cost Free Tier)
   dev: getFirestore(app),

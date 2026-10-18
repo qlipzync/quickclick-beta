@@ -15,8 +15,8 @@ import {
   TwitchClipMetadata,
   PipelineExecutionResult,
   StructuredClipMetadata,
-} from './services/clipPipeline';
-import { enqueueStreamCooldownTask, StreamCooldownPayload } from './services/cloudTasksService';
+} from './services/clipPipeline.js';
+import { enqueueStreamCooldownTask, StreamCooldownPayload } from './services/cloudTasksService.js';
 
 export interface PipelineJob {
   id: string;

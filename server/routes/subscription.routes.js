@@ -4,7 +4,7 @@ import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { getAuth } from "firebase-admin/auth";
 import { verifyAuth } from "../middleware/authMiddleware.js";
 const subscriptionRouter = Router();
-const FIRESTORE_DB_ID = process.env.FIRESTORE_DB || "qlipzync-prod";
+const FIRESTORE_DB_ID = process.env.FIRESTORE_DB || "ai-studio-quickclick-003fd948-cf64-489f-9030-863f460c6c91";
 const db = getFirestore(FIRESTORE_DB_ID);
 let stripeClient = null;
 function getStripe() {
@@ -13,6 +13,7 @@ function getStripe() {
   }
   return stripeClient;
 }
+const processedSubscriptionEvents = /* @__PURE__ */ new Set();
 subscriptionRouter.get("/status", verifyAuth, async (req, res) => {
   const uid = req.user.uid;
   try {
@@ -68,22 +69,55 @@ subscriptionRouter.post("/checkout", verifyAuth, async (req, res) => {
 });
 async function handleStripeWebhook(req, res) {
   const stripe = getStripe();
-  if (!stripe) {
-    res.status(503).json({ error: "Stripe nicht konfiguriert" });
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  if (!stripe || !webhookSecret) {
+    res.status(503).json({
+      error: "STRIPE_WEBHOOK_NOT_CONFIGURED",
+      message: "STRIPE_SECRET_KEY oder STRIPE_WEBHOOK_SECRET fehlt serverseitig."
+    });
     return;
   }
   const sig = req.headers["stripe-signature"];
+  if (!sig) {
+    res.status(400).json({ error: "MISSING_STRIPE_SIGNATURE", message: "stripe-signature Header fehlt." });
+    return;
+  }
+  const rawBody = req.rawBody;
+  if (!rawBody || !(Buffer.isBuffer(rawBody) || typeof rawBody === "string")) {
+    res.status(400).json({ error: "MISSING_RAW_BODY", message: "Raw-Body f\xFCr Signaturpr\xFCfung erforderlich." });
+    return;
+  }
   let event;
   try {
-    const rawBody = req.rawBody || req.body;
-    event = stripe.webhooks.constructEvent(
-      rawBody,
-      sig,
-      process.env.STRIPE_WEBHOOK_SECRET || ""
-    );
+    event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret);
   } catch (err) {
     console.error("[Subscription Webhook Error]:", err.message);
     res.status(400).send(`Webhook Error: ${err.message}`);
+    return;
+  }
+  if (processedSubscriptionEvents.has(event.id)) {
+    res.status(200).json({ received: true, idempotent: true });
+    return;
+  }
+  const eventDocRef = db.collection("stripe_webhook_events").doc(event.id);
+  try {
+    const snap = await eventDocRef.get();
+    if (snap.exists) {
+      processedSubscriptionEvents.add(event.id);
+      res.status(200).json({ received: true, idempotent: true });
+      return;
+    }
+    await eventDocRef.set({
+      eventId: event.id,
+      type: event.type,
+      livemode: Boolean(event.livemode),
+      status: "processing",
+      receivedAt: FieldValue.serverTimestamp()
+    });
+    processedSubscriptionEvents.add(event.id);
+  } catch (idempErr) {
+    console.error("[Subscription Webhook Idempotency Error]:", idempErr.message);
+    res.status(500).json({ error: "IDEMPOTENCY_CHECK_FAILED" });
     return;
   }
   try {
@@ -136,9 +170,24 @@ async function handleStripeWebhook(req, res) {
         break;
       }
     }
-    res.status(200).json({ received: true });
+    await eventDocRef.set(
+      {
+        status: "processed",
+        processedAt: FieldValue.serverTimestamp()
+      },
+      { merge: true }
+    );
+    res.status(200).json({ received: true, eventId: event.id });
   } catch (procErr) {
     console.error("[Subscription Webhook Processing Error]:", procErr);
+    processedSubscriptionEvents.delete(event.id);
+    await eventDocRef.set(
+      {
+        status: "error",
+        error: procErr?.message || "Processing failed"
+      },
+      { merge: true }
+    );
     res.status(500).json({ error: "WEBHOOK_PROCESSING_FAILED" });
   }
 }

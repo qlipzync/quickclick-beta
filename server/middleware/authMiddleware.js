@@ -7,7 +7,7 @@ if (!getApps().length) {
     projectId: process.env.FIREBASE_PROJECT_ID || process.env.GCLOUD_PROJECT || "qlipzync"
   });
 }
-const FIRESTORE_DB_ID = process.env.FIRESTORE_DB || "qlipzync-prod";
+const FIRESTORE_DB_ID = process.env.FIRESTORE_DB || "ai-studio-quickclick-003fd948-cf64-489f-9030-863f460c6c91";
 const db = getFirestore(FIRESTORE_DB_ID);
 const BOOTSTRAPPED_ADMIN_EMAIL = "robert.f.telekom@gmail.com";
 const TITAN_LIFETIME_EMAILS = [];

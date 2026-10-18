@@ -268,51 +268,48 @@ extraClipsRouter.all(
     const pricePerClipEur = 1.5; // 1,50 € pro On-Demand Clip
     const totalAmountCents = Math.round(clipCount * pricePerClipEur * 100);
 
-    if (stripe) {
-      const session = await stripe.checkout.sessions.create({
-        mode: 'payment',
-        customer_email: userData.email || undefined,
-        client_reference_id: userId,
-        line_items: [
-          {
-            price_data: {
-              currency: 'eur',
-              product_data: {
-                name: `${clipCount}x Extra Stream-Highlights (9:16 Video-Pipeline)`,
-                description: `Vollautomatische Zero-Storage Formatierung, Gemini 2.5 Metadaten & Social Upload für ${clipCount} zusätzliche Clips.`,
-              },
-              unit_amount: totalAmountCents,
-            },
-            quantity: 1,
-          },
-        ],
-        metadata: {
-          userId,
-          streamId,
-          clipCount: String(clipCount),
-          action: 'extra_clips_claim',
-        },
-        success_url: `${appBaseUrl}/?payment=success&stream_id=${streamId}&extra_clips=${clipCount}`,
-        cancel_url: `${appBaseUrl}/select-clips?stream_id=${streamId}&user_id=${userId}&token=${token}&max=9`,
+    if (!stripe) {
+      return res.status(503).json({
+        success: false,
+        error: 'Stripe Checkout ist nicht konfiguriert (STRIPE_SECRET_KEY fehlt). Keine simulierte Zahlung zulässig.',
       });
-
-      if (session.url) {
-        return res.redirect(session.url);
-      }
     }
 
-    // Sandbox / Fallback ohne Live-Stripe
-    await pendingStreamRef.set(
-      {
-        status: 'claimed',
-        selectedClipsCount: clipCount,
-        claimedAt: FieldValue.serverTimestamp(),
-        paidVia: 'sandbox_simulation',
+    const session = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      customer_email: userData.email || undefined,
+      client_reference_id: userId,
+      line_items: [
+        {
+          price_data: {
+            currency: 'eur',
+            product_data: {
+              name: `${clipCount}x Extra Stream-Highlights (9:16 Video-Pipeline)`,
+              description: `Vollautomatische Zero-Storage Formatierung, Gemini 2.5 Metadaten & Social Upload für ${clipCount} zusätzliche Clips.`,
+            },
+            unit_amount: totalAmountCents,
+          },
+          quantity: 1,
+        },
+      ],
+      metadata: {
+        userId,
+        streamId,
+        clipCount: String(clipCount),
+        action: 'extra_clips_claim',
       },
-      { merge: true }
-    );
+      success_url: `${appBaseUrl}/?payment=success&stream_id=${streamId}&extra_clips=${clipCount}`,
+      cancel_url: `${appBaseUrl}/select-clips?stream_id=${streamId}&user_id=${userId}&token=${token}&max=9`,
+    });
 
-    return res.redirect(`/?payment=simulated&stream_id=${streamId}&extra_clips=${clipCount}`);
+    if (session.url) {
+      return res.redirect(session.url);
+    }
+
+    return res.status(502).json({
+      success: false,
+      error: 'Stripe Checkout-URL konnte nicht generiert werden.',
+    });
   } catch (error: any) {
     console.error('[handleExtraClips Error]', error);
     return res.status(500).send(`Server-Fehler: ${error.message}`);

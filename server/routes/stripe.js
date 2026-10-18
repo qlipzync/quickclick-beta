@@ -2,8 +2,9 @@ import { Router } from "express";
 import Stripe from "stripe";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { getAuth } from "firebase-admin/auth";
+import { verifyAuth, requireAdmin } from "../middleware/authMiddleware.js";
 const stripeRouter = Router();
-const FIRESTORE_DB_ID = process.env.FIRESTORE_DB || "qlipzync-prod";
+const FIRESTORE_DB_ID = process.env.FIRESTORE_DB || "ai-studio-quickclick-003fd948-cf64-489f-9030-863f460c6c91";
 const db = getFirestore(FIRESTORE_DB_ID);
 let stripeClient = null;
 function getStripe() {
@@ -49,9 +50,11 @@ stripeRouter.get("/products", (_req, res) => {
     }
   });
 });
-stripeRouter.post(["/checkout", "/create-checkout-session"], async (req, res) => {
+stripeRouter.post(["/checkout", "/create-checkout-session"], verifyAuth, async (req, res) => {
   try {
-    const { userId, userEmail, clips, returnUrl } = req.body;
+    const authenticatedUid = req.user.uid;
+    const authenticatedEmail = req.user.email || req.body?.userEmail;
+    const { clips, returnUrl } = req.body || {};
     const requestedClips = Number(clips);
     if (isNaN(requestedClips) || requestedClips < 1 || requestedClips > 2e4) {
       return res.status(400).json({
@@ -61,15 +64,15 @@ stripeRouter.post(["/checkout", "/create-checkout-session"], async (req, res) =>
     const priceCalc = calculateDynamicClipPrice(requestedClips);
     const stripe = getStripe();
     if (!stripe) {
-      return res.status(500).json({
-        error: "STRIPE_SECRET_KEY ist nicht konfiguriert."
+      return res.status(503).json({
+        error: "STRIPE_SECRET_KEY ist serverseitig nicht konfiguriert."
       });
     }
     const appBaseUrl = process.env.APP_BASE_URL || `${req.protocol}://${req.get("host")}`;
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
-      customer_email: userEmail || void 0,
-      client_reference_id: userId || "streamer_guest",
+      customer_email: authenticatedEmail || void 0,
+      client_reference_id: authenticatedUid,
       line_items: [
         {
           price_data: {
@@ -84,8 +87,8 @@ stripeRouter.post(["/checkout", "/create-checkout-session"], async (req, res) =>
         }
       ],
       metadata: {
-        userId: userId || "streamer_guest",
-        userEmail: userEmail || "",
+        userId: authenticatedUid,
+        userEmail: authenticatedEmail || "",
         pricingModel: "dynamic_slider",
         clips: String(priceCalc.clips),
         unitPriceEur: String(priceCalc.unitPriceEur),
@@ -110,71 +113,126 @@ stripeRouter.post(["/webhook", "/"], async (req, res) => {
   const sig = req.headers["stripe-signature"];
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
   const stripe = getStripe();
-  let event;
-  if (stripe && webhookSecret && sig && req.rawBody) {
-    try {
-      event = stripe.webhooks.constructEvent(req.rawBody, sig, webhookSecret);
-    } catch (err) {
-      console.error("Stripe Webhook Signaturpr\xFCfung fehlgeschlagen:", err.message);
-      return res.status(400).send(`Webhook Error: ${err.message}`);
-    }
-  } else {
-    event = req.body;
+  if (!stripe || !webhookSecret) {
+    return res.status(503).json({
+      error: "STRIPE_WEBHOOK_NOT_CONFIGURED",
+      message: "STRIPE_SECRET_KEY oder STRIPE_WEBHOOK_SECRET fehlt serverseitig."
+    });
   }
-  if (!event?.type) {
-    return res.status(400).json({ error: "Kein g\xFCltiges Event \xFCbermittelt" });
+  if (!sig) {
+    return res.status(400).json({
+      error: "MISSING_STRIPE_SIGNATURE",
+      message: "Stripe-Signatur-Header (stripe-signature) fehlt."
+    });
+  }
+  const rawBody = req.rawBody;
+  if (!rawBody || !(Buffer.isBuffer(rawBody) || typeof rawBody === "string")) {
+    return res.status(400).json({
+      error: "MISSING_RAW_BODY",
+      message: "Unver\xE4nderter Raw-Body f\xFCr kryptografische Signaturpr\xFCfung erforderlich."
+    });
+  }
+  let event;
+  try {
+    event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret);
+  } catch (err) {
+    console.error("Stripe Webhook Signaturpr\xFCfung fehlgeschlagen:", err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+  if (!event?.id || !event?.type) {
+    return res.status(400).json({ error: "Kein g\xFCltiges Stripe-Event \xFCbermittelt" });
   }
   const { type, id: eventId } = event;
   const dataObj = event.data?.object || {};
-  if (eventId && processedWebhookIds.has(`stripe_${eventId}`)) {
-    return res.status(200).json({ received: true, note: "Duplicate event ignored" });
+  if (processedWebhookIds.has(`stripe_${eventId}`)) {
+    return res.status(200).json({ received: true, idempotent: true, note: "Duplicate event ignored" });
   }
-  processedWebhookIds.add(`stripe_${eventId}`);
+  const eventDocRef = db.collection("stripe_webhook_events").doc(eventId);
+  try {
+    const existingEventSnap = await eventDocRef.get();
+    if (existingEventSnap.exists) {
+      processedWebhookIds.add(`stripe_${eventId}`);
+      return res.status(200).json({ received: true, idempotent: true, note: "Event already processed in Firestore" });
+    }
+    await eventDocRef.set({
+      eventId,
+      type,
+      livemode: Boolean(event.livemode),
+      status: "processing",
+      receivedAt: FieldValue.serverTimestamp()
+    });
+    processedWebhookIds.add(`stripe_${eventId}`);
+  } catch (idempErr) {
+    console.error("[Stripe Idempotency Check Error]", idempErr.message);
+    return res.status(500).json({ error: "IDEMPOTENCY_CHECK_FAILED" });
+  }
   let logDetails = `Event '${type}' empfangen`;
   let logStatus = "acknowledged";
-  if (type === "checkout.session.completed") {
-    const userId = dataObj.metadata?.userId;
-    const addedClips = Number(dataObj.metadata?.clips || 0);
-    if (userId && userId !== "streamer_guest" && addedClips > 0) {
-      const userRef = db.collection("users").doc(userId);
-      await userRef.set(
-        {
-          hasActiveSubscription: true,
-          subscriptionStatus: "active",
-          subscriptionPlan: "dynamic",
-          clipBalance: FieldValue.increment(addedClips),
-          clipsLimitTotal: FieldValue.increment(addedClips),
-          stripeCustomerId: dataObj.customer || void 0,
-          updatedAt: FieldValue.serverTimestamp()
-        },
-        { merge: true }
-      );
-      try {
-        await getAuth().setCustomUserClaims(userId, {
-          subscribed: true,
-          hasActiveSubscription: true,
-          tier: "dynamic"
+  try {
+    if (type === "checkout.session.completed") {
+      const userId = dataObj.client_reference_id || dataObj.metadata?.userId;
+      const addedClips = Number(dataObj.metadata?.clips || 0);
+      if (userId && userId !== "streamer_guest" && addedClips > 0) {
+        const userRef = db.collection("users").doc(userId);
+        await userRef.set(
+          {
+            hasActiveSubscription: true,
+            subscriptionStatus: "active",
+            subscriptionPlan: "dynamic",
+            clipBalance: FieldValue.increment(addedClips),
+            clipsLimitTotal: FieldValue.increment(addedClips),
+            stripeCustomerId: dataObj.customer || void 0,
+            updatedAt: FieldValue.serverTimestamp()
+          },
+          { merge: true }
+        );
+        try {
+          await getAuth().setCustomUserClaims(userId, {
+            subscribed: true,
+            hasActiveSubscription: true,
+            tier: "dynamic"
+          });
+        } catch (claimsErr) {
+          console.warn("[Stripe Webhook Claims Error]", claimsErr.message);
+        }
+        const invoiceId = `inv_${dataObj.id || eventId}`;
+        await userRef.collection("invoices").doc(invoiceId).set({
+          id: invoiceId,
+          userId,
+          stripeInvoiceId: dataObj.id,
+          stripeEventId: eventId,
+          amountCents: dataObj.amount_total || 0,
+          currency: dataObj.currency || "eur",
+          planName: `${addedClips.toLocaleString("de-DE")} Clips (Regler-Abrechnung)`,
+          status: "paid",
+          createdAt: FieldValue.serverTimestamp()
         });
-      } catch (claimsErr) {
-        console.warn("[Stripe Webhook Claims Error]", claimsErr.message);
+        logDetails = `${addedClips} Clips erfolgreich f\xFCr UID ${userId} gutgeschrieben.`;
+        logStatus = "processed";
       }
-      const invoiceId = `inv_${dataObj.id || Date.now()}`;
-      await userRef.collection("invoices").doc(invoiceId).set({
-        id: invoiceId,
-        userId,
-        stripeInvoiceId: dataObj.id,
-        amountCents: dataObj.amount_total || 0,
-        currency: dataObj.currency || "eur",
-        planName: `${addedClips.toLocaleString("de-DE")} Clips (Regler-Abrechnung)`,
-        status: "paid",
-        createdAt: FieldValue.serverTimestamp()
-      });
-      logDetails = `${addedClips} Clips erfolgreich f\xFCr UID ${userId} gutgeschrieben.`;
-      logStatus = "processed";
     }
+    await eventDocRef.set(
+      {
+        status: logStatus,
+        details: logDetails,
+        processedAt: FieldValue.serverTimestamp()
+      },
+      { merge: true }
+    );
+  } catch (procErr) {
+    await eventDocRef.set(
+      {
+        status: "error",
+        error: procErr.message,
+        failedAt: FieldValue.serverTimestamp()
+      },
+      { merge: true }
+    );
+    processedWebhookIds.delete(`stripe_${eventId}`);
+    return res.status(500).json({ error: "WEBHOOK_PROCESSING_FAILED" });
   }
   recordStripeEvent({
-    id: eventId || `evt_${Date.now()}`,
+    id: eventId,
     type,
     createdAt: (/* @__PURE__ */ new Date()).toISOString(),
     livemode: Boolean(event.livemode),
@@ -183,7 +241,7 @@ stripeRouter.post(["/webhook", "/"], async (req, res) => {
   });
   return res.status(200).json({ received: true, eventId, status: logStatus });
 });
-stripeRouter.get(["/webhook/events", "/events"], (_req, res) => {
+stripeRouter.get(["/webhook/events", "/events"], requireAdmin, (_req, res) => {
   res.json({
     status: "ok",
     totalCount: recentStripeEvents.length,

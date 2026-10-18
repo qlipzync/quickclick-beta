@@ -1,6 +1,6 @@
 import { GoogleGenAI, Type } from '@google/genai';
 import type { Schema } from '@google/genai';
-import { parseAndValidateAIResponse } from '../schemas/quickClick.schema';
+import { parseAndValidateAIResponse } from '../schemas/quickClick.schema.js';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
@@ -218,41 +218,32 @@ export async function analyzeClipVirality(
   suggestions: string[];
   recommendedHashtags: string[];
 }> {
-  try {
-    const ai = getGeminiClient();
-    const prompt = `Analysiere den folgenden Clip-Titel für einen TikTok/Reels Gaming-Clip:
+  const ai = getGeminiClient();
+  const prompt = `Analysiere den folgenden Clip-Titel für einen TikTok/Reels Gaming-Clip:
 Titel: "${clipTitle}"
 Spiel: "${gameName || 'Twitch Stream'}"`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            viralityScore: { type: Type.NUMBER },
-            suggestions: { type: Type.ARRAY, items: { type: Type.STRING } },
-            recommendedHashtags: { type: Type.ARRAY, items: { type: Type.STRING } },
-          },
-          required: ['viralityScore', 'suggestions', 'recommendedHashtags'],
+  const response = await ai.models.generateContent({
+    model: 'gemini-2.5-flash',
+    contents: prompt,
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          viralityScore: { type: Type.NUMBER },
+          suggestions: { type: Type.ARRAY, items: { type: Type.STRING } },
+          recommendedHashtags: { type: Type.ARRAY, items: { type: Type.STRING } },
         },
+        required: ['viralityScore', 'suggestions', 'recommendedHashtags'],
       },
-    });
+    },
+  });
 
-    if (response.text) {
-      return JSON.parse(response.text);
-    }
-  } catch (e) {
-    console.warn('[Gemini Service] Fallback Virality-Scoring aktiv:', e);
+  if (!response.text) {
+    throw new Error('Gemini API hat keine Analyse-Antwort geliefert.');
   }
-
-  return {
-    viralityScore: 88,
-    suggestions: ['Hook in den ersten 2 Sekunden optimieren', 'Auto-Captions aktivieren'],
-    recommendedHashtags: ['#twitchclips', '#foryou', '#gamingmoment', '#viralstream'],
-  };
+  return JSON.parse(response.text);
 }
 
 // -----------------------------------------------------------------------------
@@ -455,62 +446,19 @@ export async function analyzeClipWithQuickClickEngine(
     return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   };
 
-  const hookEnd = Math.min(3, Math.max(2, Math.floor(duration * 0.1)));
-  const peakStart = Math.min(Math.floor(duration * 0.5), duration - 5);
-  const peakEnd = Math.min(peakStart + 5, duration);
-  const trimEnd = Math.max(duration - 2, 5);
+  const ai = getGeminiClient();
 
-  const fallbackResult: QuickClickEngineResult = {
-    clip_analysis: {
-      virality_score: 91,
-      highlight_summary: `${streamer} executes a high-speed ${game} clutch with instant target acquisition and explosive live reaction.`,
-      hook_timestamp: `00:00 - ${formatSec(hookEnd)}`,
-      peak_action_timestamp: `${formatSec(peakStart)} - ${formatSec(peakEnd)}`,
-      recommended_trim: {
-        start: '00:00',
-        end: formatSec(trimEnd),
+  const parts: any[] = [];
+  if (input.videoInlineData) {
+    parts.push({
+      inlineData: {
+        mimeType: input.videoInlineData.mimeType,
+        data: input.videoInlineData.data,
       },
-    },
-    content_generation: {
-      viral_hooks: [
-        'Wait until you see how this push ended...',
-        'Nobody expected this round to flip so fast.',
-        'Watch the crosshair placement in the final 3 seconds.',
-      ],
-      social_posts: {
-        tiktok: {
-          title: `This ${game} clutch had no right working out 💀`,
-          caption: `When the timing and crosshairs align in the final second. Catch the next stream live on Twitch and Kick! #${game.replace(/\s+/g, '').toLowerCase() || 'gaming'} #clutch #streamer`,
-          hashtags: ['#gaming', '#twitchclips', '#streamer', '#fpshighlights', '#clutchmoment'],
-        },
-        youtube_shorts: {
-          title: `How to Win a 1v3 in 5 Seconds 🔥 ${game} Competitive Clutch`,
-          description: `Insane reaction clutch during today's live stream. Like and subscribe for daily competitive clips and highlights!`,
-          hashtags: ['#Shorts', '#GamingShorts', '#ClutchMoment', '#StreamerHighlights'],
-        },
-        reels: {
-          caption: `Never give up on a play until the screen goes black. 🎮 Drop a follow for daily live stream highlights!`,
-          hashtags: ['#gamingreels', '#streamerlife', '#highlight', '#esports'],
-        },
-      },
-      call_to_action: `Follow on Twitch & Kick for daily live ${game} matches and highlights.`,
-    },
-  };
+    });
+  }
 
-  try {
-    const ai = getGeminiClient();
-
-    const parts: any[] = [];
-    if (input.videoInlineData) {
-      parts.push({
-        inlineData: {
-          mimeType: input.videoInlineData.mimeType,
-          data: input.videoInlineData.data,
-        },
-      });
-    }
-
-    const textPrompt = `Analyze this gaming highlight clip for multimodal virality and multi-platform distribution:
+  const textPrompt = `Analyze this gaming highlight clip for multimodal virality and multi-platform distribution:
 - Clip Title: "${input.clipTitle}"
 - Streamer: ${streamer}
 - Game / Category: ${game}
@@ -523,36 +471,25 @@ Strictly follow all instructions:
 - Zero placeholders (no brackets, no template names).
 - Return valid JSON matching the schema.`;
 
-    parts.push({ text: textPrompt });
+  parts.push({ text: textPrompt });
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-flash-latest',
-      contents: { parts },
-      config: {
-        systemInstruction: QUICKCLICK_ENGINE_SYSTEM_INSTRUCTION,
-        temperature: 0.5,
-        topP: 0.9,
-        responseMimeType: 'application/json',
-        responseSchema: quickClickEngineSchema,
-      },
-    });
+  const response = await ai.models.generateContent({
+    model: 'gemini-flash-latest',
+    contents: { parts },
+    config: {
+      systemInstruction: QUICKCLICK_ENGINE_SYSTEM_INSTRUCTION,
+      temperature: 0.5,
+      topP: 0.9,
+      responseMimeType: 'application/json',
+      responseSchema: quickClickEngineSchema,
+    },
+  });
 
-    const text = response.text;
-    if (text) {
-      try {
-        const validated = parseAndValidateAIResponse(text);
-        return validated as unknown as QuickClickEngineResult;
-      } catch (valErr) {
-        console.warn('[QuickClick Engine] Strict validation warning:', valErr);
-        const parsed = JSON.parse(text) as QuickClickEngineResult;
-        if (parsed.clip_analysis && parsed.content_generation) {
-          return parsed;
-        }
-      }
-    }
-  } catch (err: any) {
-    console.warn('[QuickClick Engine] Gemini API notice (using production-ready fallback):', err?.message || err);
+  const text = response.text;
+  if (!text) {
+    throw new Error('QuickClick Engine hat keine gültige Antwort von Gemini erhalten.');
   }
 
-  return fallbackResult;
+  const validated = parseAndValidateAIResponse(text);
+  return validated as unknown as QuickClickEngineResult;
 }

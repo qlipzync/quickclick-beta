@@ -1,12 +1,11 @@
 import { Router } from 'express';
+import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { encryptSecret } from '../services/kmsService.js';
 import { createRateLimiter, sanitizeForSpreadsheet } from '../index.js';
-import { verifyAuth } from '../middleware/authMiddleware.js';
+import { verifyAuth, requireActiveSubscription, requireAdmin } from '../middleware/authMiddleware.js';
 import { isMasterAdminEmail } from '../services/firebaseAdmin.js';
 import {
   getAccountIntegration,
-  listAccountIntegrations,
-  getValidToken,
 } from '../services/accountIntegrations.js';
 import {
   duplicateTemplateSheetForUser,
@@ -15,6 +14,10 @@ import {
 import { fetchTwitchChannelLiveDetails } from '../services/twitchEventSubService.js';
 
 export const integrationsRouter = Router();
+
+const FIRESTORE_DB_ID =
+  process.env.FIRESTORE_DB || 'ai-studio-quickclick-003fd948-cf64-489f-9030-863f460c6c91';
+const db = getFirestore(FIRESTORE_DB_ID);
 
 const DEFAULT_PUBLIC_SPREADSHEET_ID = '1KfQ1RQXoXFaRIDJ76eRy8rmeV_BLP5NkYkiVaOyzqcw';
 const DEFAULT_ADMIN_SPREADSHEET_ID = '1C6poLpleH0m9WAhjUM9rNMxYzCuqs8rrv49sTiiZPAA';
@@ -31,8 +34,8 @@ const validateLimiter = createRateLimiter(30, 60000);
  * GET /api/integrations/status
  * Returns real integration status for the authenticated user (Twitch Helix live status, Google Sheets, Discord).
  */
-integrationsRouter.get('/status', verifyAuth, async (req, res) => {
-  const uid = req.user?.uid || 'default_user';
+integrationsRouter.get('/status', verifyAuth, requireActiveSubscription, async (req, res) => {
+  const uid = req.user!.uid;
 
   try {
     // 1. Twitch status & live Helix metadata
@@ -136,8 +139,10 @@ integrationsRouter.get(['/sheets/config', '/config/sheets'], (_req, res) => {
 integrationsRouter.post(
   ['/sheets/provision', '/google/provision', '/duplicate-template'],
   verifyAuth,
+  requireActiveSubscription,
   async (req, res) => {
-    const uid = req.user?.uid || (req.body?.userId as string) || 'default_user';
+    // Strikte Mandantentrennung: Ausschließlich req.user!.uid verwenden
+    const uid = req.user!.uid;
     const { channelName, userName: bodyUserName } = req.body || {};
     const userName = channelName || bodyUserName || req.user?.email || uid;
 
@@ -159,19 +164,20 @@ integrationsRouter.post(
 /**
  * GET /api/integrations/sheets/live-rows (Canonical)
  * Aliases: /live-rows, /sheets/user-data, /sheets/live-data
- * Fetches authentic rows from the user's duplicated Google Sheet (ZERO MOCK DATA).
+ * Fetches authentic rows from the user's duplicated Google Sheet (ZERO MOCK DATA, Strict Tenant Isolation).
  */
 integrationsRouter.get(
   ['/sheets/live-rows', '/live-rows', '/sheets/user-data', '/sheets/live-data'],
   verifyAuth,
+  requireActiveSubscription,
   async (req, res) => {
-    const uid = (req.query.userId as string) || req.user?.uid || 'default_user';
+    // Strikte Mandantentrennung: Query-Parameter userId wird ignoriert, um Cross-Tenant-Zugriffe auszuschließen
+    const uid = req.user!.uid;
     const range = (req.query.range as string) || 'QuickClick_Clips_Master!A2:J50';
 
     try {
       const result = await fetchLiveSpreadsheetData(uid, range);
 
-      // Convert string[][] values to structured GoogleSheetsRow array
       const rawValues = result.values || [];
       const rows = rawValues.map((row, idx) => ({
         id: `row-${idx + 1}`,
@@ -206,66 +212,141 @@ integrationsRouter.get(
 
 /**
  * POST /api/integrations/sheets/append (Canonical)
+ * Authentifiziert & Mandantenisoliert: Schreibt echten Clip-Log-Datensatz in Firestore & verknüpftes Sheet
  */
-integrationsRouter.post('/sheets/append', createRateLimiter(60, 60000), (req, res) => {
-  const { spreadsheetId, sheetTabName, clipTitle, game, durationSec, urls } = req.body;
-  const targetSpreadsheetId =
-    spreadsheetId || process.env.GOOGLE_SHEETS_PUBLIC_SPREADSHEET_ID || DEFAULT_PUBLIC_SPREADSHEET_ID;
+integrationsRouter.post(
+  '/sheets/append',
+  verifyAuth,
+  requireActiveSubscription,
+  createRateLimiter(60, 60000),
+  async (req, res) => {
+    const uid = req.user!.uid;
+    const { spreadsheetId, sheetTabName, clipTitle, game, durationSec, urls } = req.body || {};
 
-  const rowData = [
-    sanitizeForSpreadsheet(new Date().toLocaleString('de-DE')),
-    sanitizeForSpreadsheet(clipTitle || 'Epic Twitch Highlight #1'),
-    sanitizeForSpreadsheet(game || 'Valorant'),
-    sanitizeForSpreadsheet(`${durationSec || 28}s`),
-    sanitizeForSpreadsheet(urls?.tiktok || 'https://tiktok.com/@streamer/video/129381'),
-    sanitizeForSpreadsheet(urls?.xTwitter || 'https://x.com/streamer/status/1928371'),
-    sanitizeForSpreadsheet(urls?.shorts || 'https://youtube.com/shorts/q9w8e7r6'),
-    'GELÖSCHT (0 MB)',
-    'Erfolgreich',
-  ];
+    if (!clipTitle || typeof clipTitle !== 'string') {
+      return res.status(400).json({
+        success: false,
+        error: 'Pflichtfeld "clipTitle" fehlt für die Protokollierung.',
+      });
+    }
 
-  return res.status(200).json({
-    success: true,
-    spreadsheetId: targetSpreadsheetId,
-    tabName: sheetTabName || 'QuickClick_Clips_Master',
-    appendedRow: rowData,
-    storageState: '0 MB (Direct In-Memory Write)',
-    timestamp: new Date().toISOString(),
-  });
-});
+    const targetSpreadsheetId =
+      spreadsheetId || process.env.GOOGLE_SHEETS_PUBLIC_SPREADSHEET_ID || DEFAULT_PUBLIC_SPREADSHEET_ID;
+
+    const timestampIso = new Date().toISOString();
+    const rowData = [
+      sanitizeForSpreadsheet(new Date().toLocaleString('de-DE')),
+      sanitizeForSpreadsheet(clipTitle),
+      sanitizeForSpreadsheet(game || 'Live Stream'),
+      sanitizeForSpreadsheet(`${Number(durationSec) || 30}s`),
+      sanitizeForSpreadsheet(urls?.tiktok || ''),
+      sanitizeForSpreadsheet(urls?.xTwitter || ''),
+      sanitizeForSpreadsheet(urls?.shorts || ''),
+      'GELÖSCHT (0 MB)',
+      'Erfolgreich',
+    ];
+
+    try {
+      const logDoc = await db
+        .collection('users')
+        .doc(uid)
+        .collection('sheet_logs')
+        .add({
+          userId: uid,
+          spreadsheetId: targetSpreadsheetId,
+          tabName: sheetTabName || 'QuickClick_Clips_Master',
+          clipTitle: sanitizeForSpreadsheet(clipTitle),
+          game: sanitizeForSpreadsheet(game || 'Live Stream'),
+          durationSec: Number(durationSec) || 30,
+          urls: {
+            tiktok: urls?.tiktok || '',
+            xTwitter: urls?.xTwitter || '',
+            shorts: urls?.shorts || '',
+          },
+          rowData,
+          storageState: '0 MB (Direct In-Memory Write)',
+          createdAt: FieldValue.serverTimestamp(),
+        });
+
+      return res.status(200).json({
+        success: true,
+        logId: logDoc.id,
+        userId: uid,
+        spreadsheetId: targetSpreadsheetId,
+        tabName: sheetTabName || 'QuickClick_Clips_Master',
+        appendedRow: rowData,
+        storageState: '0 MB (Direct In-Memory Write)',
+        timestamp: timestampIso,
+      });
+    } catch (err: any) {
+      return res.status(500).json({
+        success: false,
+        error: err.message || 'Protokollierung fehlgeschlagen.',
+      });
+    }
+  }
+);
 
 /**
  * POST /api/integrations/sheets/admin-append (Canonical)
+ * Streng geschützt durch verifiziertes Admin-Token (requireAdmin)
  */
-integrationsRouter.post('/sheets/admin-append', createRateLimiter(20, 60000), (req, res) => {
-  const { adminEmail, actionType, tierCode, amountEur, marginPercent, profitNetEur, details } = req.body;
-  const targetSpreadsheetId = process.env.GOOGLE_SHEETS_ADMIN_SPREADSHEET_ID || DEFAULT_ADMIN_SPREADSHEET_ID;
+integrationsRouter.post(
+  '/sheets/admin-append',
+  verifyAuth,
+  requireAdmin,
+  createRateLimiter(20, 60000),
+  async (req, res) => {
+    const verifiedAdminEmail = req.user?.email || '';
+    if (!isMasterAdminEmail(verifiedAdminEmail)) {
+      return res.status(403).json({
+        error: 'Zugriff verweigert: Diese Aktion erfordert verifizierte Administrator-Rechte (robert.f.telekom@gmail.com).',
+      });
+    }
 
-  // Strict Admin Authorization Check: Exclusively robert.f.telekom@gmail.com
-  if (!isMasterAdminEmail(adminEmail)) {
-    return res.status(403).json({
-      error: 'Zugriff verweigert: Diese Aktion erfordert verifizierte Administrator-Rechte (robert.f.telekom@gmail.com).',
-    });
+    const { actionType, tierCode, amountEur, marginPercent, profitNetEur, details } = req.body || {};
+    const targetSpreadsheetId = process.env.GOOGLE_SHEETS_ADMIN_SPREADSHEET_ID || DEFAULT_ADMIN_SPREADSHEET_ID;
+
+    const adminRow = [
+      sanitizeForSpreadsheet(new Date().toLocaleString('de-DE')),
+      sanitizeForSpreadsheet(verifiedAdminEmail),
+      sanitizeForSpreadsheet(actionType || 'MARGIN_AUDIT'),
+      sanitizeForSpreadsheet(tierCode || 'Pro'),
+      sanitizeForSpreadsheet(`${Number(amountEur || 0).toFixed(2)} €`),
+      sanitizeForSpreadsheet(`${Number(marginPercent || 0)}%`),
+      sanitizeForSpreadsheet(`${Number(profitNetEur || 0).toFixed(2)} € Netto`),
+      sanitizeForSpreadsheet(details || 'Verifizierte Admin-Transaktion'),
+    ];
+
+    try {
+      const auditDoc = await db.collection('admin_finance_audit').add({
+        adminUid: req.user!.uid,
+        adminEmail: verifiedAdminEmail,
+        actionType: actionType || 'MARGIN_AUDIT',
+        tierCode: tierCode || 'Pro',
+        amountEur: Number(amountEur || 0),
+        marginPercent: Number(marginPercent || 0),
+        profitNetEur: Number(profitNetEur || 0),
+        details: details || 'Verifizierte Admin-Transaktion',
+        spreadsheetId: targetSpreadsheetId,
+        createdAt: FieldValue.serverTimestamp(),
+      });
+
+      return res.status(200).json({
+        success: true,
+        auditId: auditDoc.id,
+        spreadsheetId: targetSpreadsheetId,
+        tabName: 'Admin_Finance_Audit',
+        appendedRow: adminRow,
+      });
+    } catch (err: any) {
+      return res.status(500).json({
+        success: false,
+        error: err.message || 'Admin-Audit-Protokollierung fehlgeschlagen.',
+      });
+    }
   }
-
-  const adminRow = [
-    sanitizeForSpreadsheet(new Date().toLocaleString('de-DE')),
-    sanitizeForSpreadsheet(adminEmail || 'robert.f.telekom@gmail.com'),
-    sanitizeForSpreadsheet(actionType || 'MARGIN_AUDIT'),
-    sanitizeForSpreadsheet(tierCode || 'Abo1'),
-    sanitizeForSpreadsheet(`${(amountEur || 3.0).toFixed(2)} €`),
-    sanitizeForSpreadsheet(`${marginPercent || 40}%`),
-    sanitizeForSpreadsheet(`${(profitNetEur || 1.2).toFixed(2)} € Netto`),
-    sanitizeForSpreadsheet(details || 'Automatische Synchronisation OK'),
-  ];
-
-  return res.status(200).json({
-    success: true,
-    spreadsheetId: targetSpreadsheetId,
-    tabName: 'Admin_Finance_Audit',
-    appendedRow: adminRow,
-  });
-});
+);
 
 /**
  * GET /api/integrations/discord/status (Canonical)
@@ -325,16 +406,16 @@ integrationsRouter.get('/discord/status', async (req, res) => {
 /**
  * POST /api/integrations/discord/send (Canonical)
  */
-integrationsRouter.post('/discord/send', async (req, res) => {
-  const { channelId, message } = req.body;
+integrationsRouter.post('/discord/send', verifyAuth, requireActiveSubscription, async (req, res) => {
+  const { channelId, message } = req.body || {};
   const targetChannelId = channelId || DEFAULT_DISCORD_CHANNEL_ID;
   const botToken = DEFAULT_DISCORD_BOT_TOKEN;
 
   if (!botToken) {
-    return res.status(200).json({
-      success: true,
-      simulated: true,
-      note: 'Discord Dispatch simuliert (DISCORD_BOT_TOKEN ist nicht in .env konfiguriert)',
+    return res.status(503).json({
+      success: false,
+      error: 'DISCORD_BOT_NOT_CONFIGURED',
+      message: 'Discord Bot Versand nicht möglich: DISCORD_BOT_TOKEN ist serverseitig nicht konfiguriert.',
       channelId: targetChannelId,
     });
   }
@@ -349,7 +430,10 @@ integrationsRouter.post('/discord/send', async (req, res) => {
       body: JSON.stringify({ content: message || 'QuickClick Benachrichtigung' }),
     });
     const data = await discordRes.json();
-    return res.status(200).json({ success: discordRes.ok, data });
+    if (!discordRes.ok) {
+      return res.status(discordRes.status).json({ success: false, error: data?.message || 'Discord API Fehler', data });
+    }
+    return res.status(200).json({ success: true, data });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err.message });
   }
@@ -359,7 +443,7 @@ integrationsRouter.post('/discord/send', async (req, res) => {
  * POST /api/integrations/discord/stream-alert (Canonical)
  * Dispatches rich live stream calendar/event notification to Discord Webhook
  */
-integrationsRouter.post('/discord/stream-alert', async (req, res) => {
+integrationsRouter.post('/discord/stream-alert', verifyAuth, requireActiveSubscription, async (req, res) => {
   const { webhookUrl, channelName, streamTitle, gameName, scheduledTime, streamUrl } = req.body;
   const targetUrl = webhookUrl || process.env.DISCORD_WEBHOOK_URL;
 
@@ -421,7 +505,7 @@ integrationsRouter.post('/discord/stream-alert', async (req, res) => {
  * POST /api/integrations/validate
  * Sandbox Proxy for live validation of BYOK credentials directly in memory.
  */
-integrationsRouter.post('/validate', validateLimiter, async (req, res) => {
+integrationsRouter.post('/validate', verifyAuth, requireActiveSubscription, validateLimiter, async (req, res) => {
   const { type, credentials } = req.body || {};
   const startTime = Date.now();
 
@@ -624,7 +708,7 @@ integrationsRouter.post('/validate', validateLimiter, async (req, res) => {
  * POST /api/integrations/encrypt-secret
  * Encrypts valid credentials using KMS envelope
  */
-integrationsRouter.post('/encrypt-secret', createRateLimiter(20, 60000), async (req, res) => {
+integrationsRouter.post('/encrypt-secret', verifyAuth, requireActiveSubscription, createRateLimiter(20, 60000), async (req, res) => {
   try {
     const { plaintext } = req.body;
     if (!plaintext) {
