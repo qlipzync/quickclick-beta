@@ -18,7 +18,7 @@ test('Stripe webhook handler is present without requiring secrets at module impo
 test('source-level security guard: checkout requires verified identity', async () => {
   const { readFile } = await import('node:fs/promises');
   const source = await readFile(new URL('../server/routes/stripe.ts', import.meta.url), 'utf8');
-  assert.match(source, /post\(\['\/checkout', '\/create-checkout-session'\], requireAuth/);
+  assert.match(source, /post\(\['\/checkout', '\/create-checkout-session'\], stripeRouteRateLimit\(10, 60_000\), requireAuth/);
   assert.match(source, /const userId = req\.user\?\.uid/);
   assert.doesNotMatch(source, /event = req\.body/);
   assert.match(source, /constructEvent\(\(req as any\)\.rawBody, signature, webhookSecret\)/);
