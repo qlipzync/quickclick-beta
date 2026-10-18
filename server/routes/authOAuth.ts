@@ -396,11 +396,9 @@ authOAuthRouter.post('/2fa/verify', createRateLimiter(15, 900000), (req, res) =>
   const { code, secret, backupCodes } = req.body;
   const clean = (code || '').trim();
 
-  const isBackup = backupCodes && Array.isArray(backupCodes) && backupCodes.includes(clean);
+  const isBackup = false; // Backup codes must be verified against server-stored, single-use hashes.
   const isTotpValid = secret ? verifyTotpRFC6238(clean, secret) : false;
-  const isSandboxDemo = process.env.NODE_ENV !== 'production' && clean === '123456';
-
-  const isValid = isTotpValid || isBackup || isSandboxDemo;
+  const isValid = isTotpValid || isBackup;
 
   if (!isValid) {
     return res.status(401).json({
