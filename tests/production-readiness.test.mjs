@@ -97,7 +97,7 @@ test('both Stripe webhook paths require raw signed payloads and durable replay g
   const dynamicStripe = readFileSync('server/routes/stripe.ts', 'utf8');
   const subscription = readFileSync('server/routes/subscription.routes.ts', 'utf8');
 
-  assert.match(server, /req\.originalUrl\.includes\('\/subscription\/webhook'\)/);
+  assert.match(server, /'\/api\/(?:v1\/)?subscription\/webhook'/);
   assert.match(dynamicStripe, /constructEvent\(\(req as any\)\.rawBody, signature, webhookSecret\)/);
   assert.doesNotMatch(dynamicStripe, /event\s*=\s*req\.body/);
   assert.match(dynamicStripe, /_stripeWebhookEvents/);
