@@ -237,7 +237,7 @@ authOAuthRouter.all(['/:provider/callback', '/callback/:provider'], async (req, 
     } else if (provider === 'google' || provider === 'youtube') {
       const clientId = process.env.GOOGLE_CLIENT_ID || '248792984033-91mcnb6d2qhl397nnou2fk6jp1d1dphn.apps.googleusercontent.com';
       const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-      const redirectUri = process.env.GOOGLE_REDIRECT_URI || `\({appBaseUrl}/api/auth/\){provider}/callback`;
+      const redirectUri = process.env.GOOGLE_REDIRECT_URI || `${appBaseUrl}/api/auth/${provider}/callback`;
       if (clientId && clientSecret) {
         const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
           method: 'POST',
