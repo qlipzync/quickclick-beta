@@ -1,12 +1,12 @@
 {
   "projectId": "qlipzync",
-  "appId": "1:248792984033:web:3c55dbd341eb24f6300aa0",
+  "appId": "1:248792984033:web:76f9fb6f86f42daf300aa0",
   "apiKey": "AIzaSyB209DOGAYYqvZcD6KuQ4qvE3Z4RACiooM",
   "authDomain": "qlipzync.firebaseapp.com",
   "firestoreDatabaseId": "ai-studio-quickclick-003fd948-cf64-489f-9030-863f460c6c91",
   "storageBucket": "qlipzync.firebasestorage.app",
   "messagingSenderId": "248792984033",
-  "measurementId": "G-X5B6GPCF8H",
+  "measurementId": "G-105P5W83NR",
   "oAuthClientId": "248792984033-91mcnb6d2qhl397nnou2fk6jp1d1dphn.apps.googleusercontent.com",
   "recaptchaSiteKey": ""
 }
