@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - main
-      - fix-npm-dependencies
-      - 'fix/production-readiness-*'
   pull_request:
     branches:
       - main
@@ -20,21 +18,19 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  PROJECT_ID: 'qlipzync'
-  REGION: 'europe-west3'
-  SERVICE_NAME: 'quickclick-app'
-  ARTIFACT_REPO: 'quickclick'
-  IMAGE_NAME: 'app'
-  RUNTIME_SA: 'qlipzync-runner@qlipzync.iam.gserviceaccount.com'
-  FIRESTORE_DB: 'ai-studio-quickclick-003fd948-cf64-489f-9030-863f460c6c91'
+  PROJECT_ID: "qlipzync"
+  REGION: "europe-west3"
+  SERVICE_NAME: "quickclick-app"
+  ARTIFACT_REPO: "quickclick"
+  IMAGE_NAME: "app"
+  RUNTIME_SA: "qlipzync-runner@qlipzync.iam.gserviceaccount.com"
+  FIRESTORE_DB: "ai-studio-quickclick-003fd948-cf64-489f-9030-863f460c6c91"
 
 jobs:
-  # =========================================================================
-  # STUFE 1: Qualitätsprüfung, Tests & Smoke-Test (läuft auf allen Branches/PRs)
-  # =========================================================================
   verify:
     name: Typecheck, Tests, Audit & Container Smoke Test
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -61,7 +57,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: "21"
 
       - name: Firestore rules emulator tests
         run: npx --yes firebase-tools@latest emulators:exec --only firestore --project demo-quickclick-beta "npm run test:rules"
@@ -69,15 +65,18 @@ jobs:
       - name: High and critical dependency audit
         run: npm audit --audit-level=high
 
-      - name: Build production Docker image (Local Verification)
+      - name: Build production Docker image (local verification)
         run: docker build --tag quickclick-beta-ci .
 
       - name: Smoke test production container
         shell: bash
         run: |
           set -euo pipefail
-          cleanup() { docker rm -f quickclick-beta-smoke >/dev/null 2>&1 || true; }
+          cleanup() {
+            docker rm -f quickclick-beta-smoke >/dev/null 2>&1 || true
+          }
           trap cleanup EXIT
+
           docker run -d --name quickclick-beta-smoke \
             -p 127.0.0.1:8080:3000 \
             -e NODE_ENV=production \
@@ -86,46 +85,46 @@ jobs:
             -e GCP_REGION=${{ env.REGION }} \
             -e FIRESTORE_DB=${{ env.FIRESTORE_DB }} \
             quickclick-beta-ci
+
           for attempt in $(seq 1 30); do
             if curl --fail --silent http://127.0.0.1:8080/health; then
               exit 0
             fi
             sleep 2
           done
+
           docker logs quickclick-beta-smoke
           exit 1
 
-  # =========================================================================
-  # STUFE 2: WIF Auth, Artifact Registry Push & Cloud Run Deploy (nur main)
-  # =========================================================================
   deploy:
     name: Build & Deploy to Cloud Run
     needs: verify
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout Repository
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Authenticate to Google Cloud via WIF
         id: auth
         uses: google-github-actions/auth@v2
         with:
-          token_format: 'access_token'
+          token_format: "access_token"
           workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
           service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
 
-      - name: Configure Docker Login
+      - name: Configure Docker login
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGION }}-docker.pkg.dev
-          username: 'oauth2accesstoken'
+          username: "oauth2accesstoken"
           password: ${{ steps.auth.outputs.access_token }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build and Push Container Image
+      - name: Build and push container image
         uses: docker/build-push-action@v5
         with:
           context: .
