@@ -1,22 +1,39 @@
-name: Deploy QuickClick to Cloud Run
+name: Production CI & Cloud Run Deployment
 
 on:
+  push:
+    branches:
+      - main
+      - fix-npm-dependencies
+      - 'fix/production-readiness-*'
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
   contents: read
   id-token: write
 
+concurrency:
+  group: ci-cd-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
-  PROJECT_ID: qlipzync
-  REGION: europe-west3
-  SERVICE: quickclick-app
-  SERVICE_ACCOUNT: qlipzync-runner@qlipzync.iam.gserviceaccount.com
-  FIRESTORE_DB: ai-studio-quickclick-003fd948-cf64-489f-9030-863f460c6c91
+  PROJECT_ID: 'qlipzync'
+  REGION: 'europe-west3'
+  SERVICE_NAME: 'quickclick-app'
+  ARTIFACT_REPO: 'quickclick'
+  IMAGE_NAME: 'app'
+  RUNTIME_SA: 'qlipzync-runner@qlipzync.iam.gserviceaccount.com'
+  FIRESTORE_DB: 'ai-studio-quickclick-003fd948-cf64-489f-9030-863f460c6c91'
 
 jobs:
+  # =========================================================================
+  # STUFE 1: Qualitätsprüfung, Tests & Smoke-Test (läuft auf allen Branches/PRs)
+  # =========================================================================
   verify:
-    name: Verify before deployment
+    name: Typecheck, Tests, Audit & Container Smoke Test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -31,7 +48,7 @@ jobs:
       - name: Install locked dependencies
         run: npm ci --legacy-peer-deps
 
-      - name: Typecheck
+      - name: Typecheck & Lint
         run: npm run lint
 
       - name: Build frontend and production server
@@ -52,8 +69,8 @@ jobs:
       - name: High and critical dependency audit
         run: npm audit --audit-level=high
 
-      - name: Build production Docker image
-        run: docker build --tag quickclick-beta-predeploy .
+      - name: Build production Docker image (Local Verification)
+        run: docker build --tag quickclick-beta-ci .
 
       - name: Smoke test production container
         shell: bash
@@ -68,7 +85,7 @@ jobs:
             -e GCP_PROJECT=${{ env.PROJECT_ID }} \
             -e GCP_REGION=${{ env.REGION }} \
             -e FIRESTORE_DB=${{ env.FIRESTORE_DB }} \
-            quickclick-beta-predeploy
+            quickclick-beta-ci
           for attempt in $(seq 1 30); do
             if curl --fail --silent http://127.0.0.1:8080/health; then
               exit 0
@@ -78,37 +95,63 @@ jobs:
           docker logs quickclick-beta-smoke
           exit 1
 
+  # =========================================================================
+  # STUFE 2: WIF Auth, Artifact Registry Push & Cloud Run Deploy (nur main)
+  # =========================================================================
   deploy:
-    name: Deploy verified main branch only
+    name: Build & Deploy to Cloud Run
     needs: verify
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
-    environment: production
     steps:
-      - name: Checkout
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Authenticate to Google Cloud via Workload Identity Federation
+      - name: Authenticate to Google Cloud via WIF
+        id: auth
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: projects/248792984033/locations/global/workloadIdentityPools/github-pool/providers/github-provider
-          service_account: ${{ env.SERVICE_ACCOUNT }}
+          token_format: 'access_token'
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
 
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
+      - name: Configure Docker Login
+        uses: docker/login-action@v3
         with:
-          project_id: ${{ env.PROJECT_ID }}
+          registry: ${{ env.REGION }}-docker.pkg.dev
+          username: 'oauth2accesstoken'
+          password: ${{ steps.auth.outputs.access_token }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and Push Container Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.ARTIFACT_REPO }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.ARTIFACT_REPO }}/${{ env.IMAGE_NAME }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Deploy to Cloud Run
-        run: |
-          gcloud run deploy "${{ env.SERVICE }}" \
-            --source . \
-            --region "${{ env.REGION }}" \
-            --project "${{ env.PROJECT_ID }}" \
-            --allow-unauthenticated \
-            --service-account "${{ env.SERVICE_ACCOUNT }}" \
-            --memory 1Gi \
-            --cpu 1 \
-            --min-instances 0 \
-            --max-instances 10 \
-            --set-env-vars "NODE_ENV=production,GCP_PROJECT=${{ env.PROJECT_ID }},GCP_REGION=${{ env.REGION }},FIRESTORE_DB=${{ env.FIRESTORE_DB }}"
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ env.SERVICE_NAME }}
+          region: ${{ env.REGION }}
+          image: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.ARTIFACT_REPO }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          project_id: ${{ env.PROJECT_ID }}
+          env_vars: |
+            NODE_ENV=production
+            GCP_PROJECT=${{ env.PROJECT_ID }}
+            GCP_REGION=${{ env.REGION }}
+            FIRESTORE_DB=${{ env.FIRESTORE_DB }}
+          flags: >-
+            --allow-unauthenticated
+            --service-account=${{ env.RUNTIME_SA }}
+            --memory=1Gi
+            --cpu=1
+            --min-instances=0
+            --max-instances=10
